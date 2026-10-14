@@ -117,9 +117,10 @@ power. It starts in about a second, alongside the game, and exits within about
   own open-file soft limit for them, and leaves the game's alone.
 - It turns off Vulkan layers for its own device (Steam's overlay, MangoHud), so
   its jobs go straight to the driver. This needs Vulkan loader 1.3.234 or later
-  (Ubuntu 22.04 ships 1.3.204, which keeps the layers on), and a layer that
-  `VK_INSTANCE_LAYERS`, `VK_LOADER_LAYERS_ENABLE` or `VK_LOADER_LAYERS_ALLOW`
-  asks for stays on.
+  (Ubuntu 22.04 ships 1.3.204, which keeps the layers on). A layer that
+  `VK_INSTANCE_LAYERS` or `VK_LOADER_LAYERS_ENABLE` asks for stays on, and
+  `VK_LOADER_LAYERS_ALLOW` (loader 1.3.262 or later) exempts the layers it
+  names.
 - It passes SIGTERM, SIGINT, SIGHUP and SIGQUIT sent to it on to the game, and
   exits with the game's exit status.
 

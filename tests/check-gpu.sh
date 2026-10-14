@@ -5,8 +5,9 @@
 # time: it starts and stops cleanly under a 1024 open-file soft limit, stops
 # when its command exits, reports a hold, and loads no Vulkan layer even when
 # the environment asks for Steam's overlay or MangoHud. Needs an NVIDIA GPU
-# with its Vulkan driver; run it with no game running. Exits 1 if any check
-# fails.
+# with its Vulkan driver and Vulkan loader 1.3.234 or later (an older loader
+# keeps the layers on, so the last check fails); run it with no game running.
+# Exits 1 if any check fails.
 set -euo pipefail
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -57,7 +58,8 @@ else
     fail "reports a hold" "stderr was [$(cat "$work_dir/hold")]"
 fi
 
-# Layers a launcher asks for in the environment stay out of the keepalive.
+# Implicit layers a launcher enables through the environment stay out of the
+# keepalive (loader 1.3.234 or later).
 ENABLE_VK_LAYER_VALVE_steam_overlay_1=1 MANGOHUD=1 "$keepalive" sleep 3 2>/dev/null &
 wrapper_pid=$!
 sleep 2

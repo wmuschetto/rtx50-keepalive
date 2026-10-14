@@ -2,9 +2,12 @@
 # Usage: tests/check.sh
 #
 # Builds rtx50-keepalive with warnings as errors (with every compiler found
-# among cc, gcc and clang) and tests how it runs a command. Needs no GPU: the
-# Vulkan loader is pointed at a driver file that does not exist, so the
-# keepalive fails to start, which is the path that must still run the command.
+# among cc, gcc and clang) and tests how it runs a command and handles
+# signals. Needs no GPU: the Vulkan loader is pointed at a driver file that
+# does not exist, so the keepalive fails to start, which is the path that must
+# still run the command. One check names a FIFO as the driver file instead, to
+# hold the keepalive in vkCreateInstance. The helpers in tests/ (failed-create,
+# hangup, slow-fork) are built with the first compiler that built it.
 # Exits 1 if any check fails.
 set -euo pipefail
 

@@ -128,8 +128,8 @@ static void on_stop_signal(int signal_number, siginfo_t *info, void *context) {
         /* Pass on a signal a process sent to this one. A signal from the
          * terminal (si_code SI_KERNEL) went to the whole process group, the
          * command included, so passing it on would deliver it twice; the
-         * SIGHUP of a hangup is the exception, sent to the session leader
-         * alone. */
+         * SIGHUP of a hangup is the exception when this process leads its
+         * session, since that goes to the leader alone. */
         if (info->si_code <= 0 || (signal_number == SIGHUP && leads_session)) {
             int saved_errno = errno;
             kill((pid_t)command_pid, signal_number);
@@ -286,9 +286,9 @@ static int find_memory_type(VkPhysicalDevice gpu, uint32_t allowed_types, uint32
 }
 
 /* Destroys whatever keepalive_start created; safe after a partial start,
- * since a handle is stored only once its create succeeded (a failed create
- * leaves its output undefined). Used when the keepalive fails while its
- * command runs on. */
+ * since a handle is stored, and a fence counted, only once its create
+ * succeeded (a failed create leaves its output undefined). Used when the
+ * keepalive fails while its command runs on. */
 static void keepalive_destroy(Keepalive *k) {
     if (k->device != VK_NULL_HANDLE) {
         vkDeviceWaitIdle(k->device); /* best effort: the objects go either way */
@@ -417,8 +417,9 @@ static int record_jobs(Keepalive *k, uint32_t queue_family) {
 static int keepalive_start(Keepalive *k) {
     /* Implicit layers (Steam's overlay, MangoHud and the like) follow the
      * environment a launcher sets for the game; this device needs none.
-     * Loaders before 1.3.234 ignore the variable, and VK_INSTANCE_LAYERS,
-     * VK_LOADER_LAYERS_ENABLE and VK_LOADER_LAYERS_ALLOW override it. */
+     * Loaders before 1.3.234 ignore the variable; VK_INSTANCE_LAYERS and
+     * VK_LOADER_LAYERS_ENABLE override it, and so does VK_LOADER_LAYERS_ALLOW
+     * on loaders from 1.3.262. */
     if (setenv("VK_LOADER_LAYERS_DISABLE", "~all~", 1) != 0) {
         fprintf(stderr, PROGRAM ": setenv failed (%s); the keepalive is off\n", strerror(errno));
         return -1;
