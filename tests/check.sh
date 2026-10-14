@@ -3,14 +3,15 @@
 #
 # Builds rtx50-keepalive with warnings as errors (with every compiler found
 # among cc, gcc and clang) and tests how it runs a command and handles
-# signals, and the install path make install and uninstall take (dry runs
-# only). Needs no GPU: the Vulkan loader is pointed at a driver file that
-# does not exist and kept from the drivers a loader settings file adds, so
-# the keepalive fails to start, which is the path that must still run the
-# command. One check names a FIFO as the driver file instead, to hold the
-# keepalive in vkCreateInstance. The helpers in tests/ (empty-argv,
-# failed-create, hangup, kill-log, slow-fork, unreaped-child) are built with
-# the first compiler that built it.
+# signals, what make install and uninstall do (in a folder under its work
+# directory), and the CI workflow's token, pins and credentials. Needs no
+# GPU: the Vulkan loader is pointed at a driver file that does not exist and
+# kept from the drivers a loader settings file adds, so the keepalive fails
+# to start, which is the path that must still run the command. One check
+# names a FIFO as the driver file instead, to hold the keepalive in
+# vkCreateInstance. The helpers in tests/ (empty-argv, failed-create, hangup,
+# kill-log, slow-fork, unreaped-child) are built with the first compiler that
+# built it.
 # Exits 1 if any check fails.
 set -euo pipefail
 
@@ -390,11 +391,45 @@ for target in install uninstall; do
     set -e
     expect "make $target refuses a PREFIX with a space" status 2 "$status"
 done
+
+# make install gives the binary mode 755, so under sudo only root can change
+# it, and make uninstall removes it. They run on a copy of the Makefile beside
+# a binary newer than the source, so nothing is built. PREFIX is given since
+# one in the environment would move the binary.
+stage="$work_dir/stage"
+mkdir "$stage"
+cp "$repo_dir/Makefile" "$repo_dir/rtx50-keepalive.c" "$stage/"
+cp "$keepalive" "$stage/rtx50-keepalive"
+installed_binary="$stage/root/usr/local/bin/rtx50-keepalive"
+make_in_stage() {
+    env -u MAKEFLAGS make --no-print-directory -C "$stage" DESTDIR="$stage/root" PREFIX=/usr/local "$@" 2>&1
+}
 set +e
-output="$(make_dry_run uninstall PREFIX=/opt/x)"
+output="$(make_in_stage install)"
 set -e
-expect "make uninstall removes PREFIX/bin/rtx50-keepalive" output \
-    "rm -f /opt/x/bin/rtx50-keepalive" "$output"
+expect "make install gives the binary mode 755" mode 755 \
+    "$(stat -c %a "$installed_binary" 2>/dev/null || echo "none, make printed: $output")"
+set +e
+output="$(make_in_stage uninstall)"
+set -e
+if [[ -e "$installed_binary" ]]; then
+    fail "make uninstall removes the binary" "it is still there, make printed: $output"
+else
+    pass "make uninstall removes the binary"
+fi
+
+# The workflow runs the code it tests with a token that can only read, actions
+# pinned to a commit, and no credentials left in the checkout.
+workflow="$repo_dir/.github/workflows/check.yml"
+expect "the workflow's token can only read" permissions "  contents: read" \
+    "$(awk '/^permissions:/ { block = 1; next } /^[^ #]/ { block = 0 } block && NF && !/^[[:space:]]*#/' "$workflow")"
+expect "no job widens the workflow's token" "job permissions" "" \
+    "$(grep -E '^[[:space:]]+permissions:' "$workflow" || true)"
+expect "every action is pinned to a commit" "unpinned actions" "" \
+    "$(grep -E '^[[:space:]-]*uses:' "$workflow" | grep -vE 'uses: [^@[:space:]]+@[0-9a-f]{40}([[:space:]]|$)' || true)"
+expect "the checkout keeps no credentials" "persist-credentials: false lines" \
+    "$(grep -c 'uses: actions/checkout@' "$workflow" || true)" \
+    "$(grep -cE '^[[:space:]]+persist-credentials: false([[:space:]]|$)' "$workflow" || true)"
 
 if command -v shellcheck >/dev/null; then
     if shellcheck "$repo_dir"/tests/*.sh; then
