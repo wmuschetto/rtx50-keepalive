@@ -60,7 +60,8 @@ This installs `/usr/local/bin/rtx50-keepalive`. To install somewhere else, set
 `PREFIX`, e.g. `make install PREFIX=~/.local`, and then use the program's full
 path in launch options, since a launcher's `PATH` may not include that folder.
 
-To remove it: `sudo make uninstall`.
+To remove it: `sudo make uninstall`. If you installed with `PREFIX`, pass the same
+one, e.g. `make uninstall PREFIX=~/.local`.
 
 ## Use
 

@@ -3,7 +3,7 @@
 #   make check                  tests that need no GPU (what CI runs)
 #   make check-gpu              tests on the NVIDIA GPU; run them with no game running
 #   sudo make install           install to /usr/local/bin (PREFIX=... to change)
-#   sudo make uninstall
+#   sudo make uninstall         remove it (the same PREFIX=... as install)
 
 PREFIX ?= /usr/local
 CC ?= cc
