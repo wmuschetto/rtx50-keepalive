@@ -16,9 +16,10 @@ tracked upstream as
 
 Traces posted in that issue show where the time goes: the GPU finishes the
 game's work, but the driver holds back the "work done" signal for seconds, and
-the game waits for it. Users there report that other GPU activity ends a freeze
-early: a video playing on a second monitor, or opening the desktop's overview.
-This program supplies that activity without putting anything on screen.
+the game waits for it. Users there report that other GPU activity helps:
+opening the desktop's overview ends a freeze at once, and a video playing on a
+second monitor keeps freezes from starting. This program supplies that activity
+without putting anything on screen.
 
 To check whether your freezes are this bug, watch GPU utilization during one,
 for example with `nvidia-smi --query-gpu=utilization.gpu --format=csv -lms 200`.

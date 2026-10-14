@@ -8,11 +8,12 @@
  * Build: make (see the Makefile)
  *
  * In #880 the driver holds back a game's "work done" events for seconds, and
- * the game stops until they arrive. Users there report that other GPU activity,
- * such as a video on another monitor, ends a hold early. This program supplies
- * that activity without drawing anything: from its own Vulkan device it gives
- * the GPU a tiny job (a 4-byte buffer fill) every SUBMIT_INTERVAL_MS and waits
- * on each job's fence.
+ * the game stops until they arrive. Users there report that other GPU activity
+ * helps: opening the desktop's overview ends a hold, and a video on another
+ * monitor keeps holds from starting. This program supplies that activity
+ * without drawing anything: from its own Vulkan device it gives the GPU a tiny
+ * job (a 4-byte buffer fill) every SUBMIT_INTERVAL_MS and waits on each job's
+ * fence.
  *
  * With a command it runs the command as a child, with the environment it was
  * given, runs the keepalive beside it, and exits with the command's status
