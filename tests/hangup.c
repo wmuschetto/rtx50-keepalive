@@ -24,9 +24,10 @@
 #include <time.h>
 #include <unistd.h>
 
-/* Written to once the processes in COMMAND's session have their signal
- * handlers in place, so the signal never comes before them, however slow the
- * start. */
+/* A process in COMMAND's session writes to it once the signal is safe to send:
+ * the command's trap is set, and the keepalive blocked its stop signals before
+ * it forked, so they wait for its handlers. The signal never comes too early,
+ * however slow the start. */
 #define READY_DESCRIPTOR 3
 #define GIVE_UP_AFTER_MS 5000
 #define POLL_MS 50
