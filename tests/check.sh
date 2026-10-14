@@ -402,9 +402,13 @@ expect_not_passed_on() {
 
 # A terminal emulator runs the keepalive as the leader of a new session; when
 # the window closes, the kernel sends SIGHUP to the leader alone.
+# Each command writes a line to descriptor 3 once its trap is in place, and
+# hangup waits for that line before the hangup or Ctrl-C. The keepalive forks
+# only after blocking its stop signals, so the line also means it is ready.
 status=0
 build "$helper_compiler" -o "$work_dir/hangup" "$repo_dir/tests/hangup.c" &&
-    "$work_dir/hangup" "$keepalive" sh -c 'trap "exit 9" HUP; while :; do sleep 0.05; done' >/dev/null 2>&1 || status=$?
+    "$work_dir/hangup" "$keepalive" sh -c 'trap "exit 9" HUP; echo >&3; while :; do sleep 0.05; done' \
+        >/dev/null 2>&1 || status=$?
 expect "a terminal's hangup is passed on to the command" status 9 "$status"
 
 # The terminal's Ctrl-C goes to its whole foreground process group, the command
@@ -414,7 +418,8 @@ status=0
 build "$helper_compiler" -shared -fPIC -o "$work_dir/kill-log.so" "$repo_dir/tests/kill-log.c" -ldl &&
     "$work_dir/hangup" --interrupt \
         env LD_PRELOAD="$work_dir/kill-log.so" KILL_LOG="$work_dir/interrupt-kills.log" \
-        "$keepalive" sh -c 'trap "exit 9" INT; while :; do sleep 0.05; done' >/dev/null 2>&1 || status=$?
+        "$keepalive" sh -c 'trap "exit 9" INT; echo >&3; while :; do sleep 0.05; done' \
+        >/dev/null 2>&1 || status=$?
 expect_not_passed_on "Ctrl-C is not passed on to the command" 9 "$work_dir/interrupt-kills.log"
 
 # When a shell leads the session, the hangup's SIGHUP ends the shell, and the
@@ -424,7 +429,8 @@ expect_not_passed_on "Ctrl-C is not passed on to the command" 9 "$work_dir/inter
 status=0
 "$work_dir/hangup" sh -c '"$@"; exit' sh \
     env LD_PRELOAD="$work_dir/kill-log.so" KILL_LOG="$work_dir/shell-hangup-kills.log" \
-    "$keepalive" sh -c 'trap "exit 9" HUP; while :; do sleep 0.05; done' >/dev/null 2>&1 || status=$?
+    "$keepalive" sh -c 'trap "exit 9" HUP; echo >&3; while :; do sleep 0.05; done' \
+    >/dev/null 2>&1 || status=$?
 expect_not_passed_on "a hangup's SIGHUP is not passed on when a shell leads the session" 129 \
     "$work_dir/shell-hangup-kills.log"
 
