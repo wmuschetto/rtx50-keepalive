@@ -3,7 +3,8 @@
 #
 # Builds rtx50-keepalive with warnings as errors (with every compiler found
 # among cc, gcc and clang) and tests how it runs a command and handles
-# signals. Needs no GPU: the Vulkan loader is pointed at a driver file that
+# signals, and the install path make install and uninstall take (dry runs
+# only). Needs no GPU: the Vulkan loader is pointed at a driver file that
 # does not exist, so the keepalive fails to start, which is the path that must
 # still run the command. One check names a FIFO as the driver file instead, to
 # hold the keepalive in vkCreateInstance. The helpers in tests/ (empty-argv,
@@ -341,6 +342,26 @@ else
     fail "without a command, a SIGHUP ignored on entry stays ignored" \
         "SigIgn was $ignored_mask, without SIGHUP's bit"
 fi
+
+# Prints what make would run for the given arguments, with DESTDIR empty.
+make_dry_run() {
+    env -u MAKEFLAGS make -n --no-print-directory -C "$repo_dir" DESTDIR= "$@" 2>&1
+}
+
+# make install and uninstall refuse a PREFIX or DESTDIR with a space, which
+# would split the path and copy or delete the wrong files.
+for target in install uninstall; do
+    set +e
+    make_dry_run "$target" PREFIX="$work_dir/a b" >/dev/null
+    status=$?
+    set -e
+    expect "make $target refuses a PREFIX with a space" status 2 "$status"
+done
+set +e
+output="$(make_dry_run uninstall PREFIX=/opt/x)"
+set -e
+expect "make uninstall removes PREFIX/bin/rtx50-keepalive" output \
+    "rm -f /opt/x/bin/rtx50-keepalive" "$output"
 
 if command -v shellcheck >/dev/null; then
     if shellcheck "$repo_dir"/tests/*.sh; then

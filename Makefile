@@ -12,6 +12,12 @@ CFLAGS ?= -O2
 # stops someone from building it.
 WARNINGS = -std=c17 -Wall -Wextra -Wshadow -Wconversion
 LDLIBS = -lvulkan
+# Left unquoted in the recipes so the shell expands a ~ that zsh and fish pass
+# to make literally; whitespace would split it into several paths, so refuse it.
+# Expanded only when install or uninstall runs.
+install_path = $(DESTDIR)$(PREFIX)/bin/rtx50-keepalive
+installed = $(if $(filter 1,$(words $(install_path))),$(install_path),$(error \
+    PREFIX and DESTDIR must form one path without spaces, not [$(DESTDIR)$(PREFIX)]))
 
 all: rtx50-keepalive
 
@@ -25,10 +31,10 @@ check-gpu:
 	tests/check-gpu.sh
 
 install: rtx50-keepalive
-	install -D -m 755 rtx50-keepalive $(DESTDIR)$(PREFIX)/bin/rtx50-keepalive
+	install -D -m 755 rtx50-keepalive $(installed)
 
 uninstall:
-	rm -f $(DESTDIR)$(PREFIX)/bin/rtx50-keepalive
+	rm -f $(installed)
 
 clean:
 	rm -f rtx50-keepalive
