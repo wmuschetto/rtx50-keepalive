@@ -139,7 +139,7 @@ anti-cheat vendor has reviewed it, so use it with online games at your own risk.
 
 ## Limitations
 
-- It is a workaround, not a fix, and has been measured on one machine so far.
+- It is a workaround, measured on one machine so far.
 - It uses the first discrete NVIDIA GPU. On a machine with two, that may not be
   the one the game runs on.
 - If a game's launcher starts the game and then exits, the keepalive stops with
