@@ -563,7 +563,8 @@ if output="$(make_in_stage CC="$helper_compiler" CFLAGS="-O2 -Werror")"; then
 else
     fail "make builds it with -Werror" "make printed: $output"
 fi
-output="$(make_in_stage install)" || true
+# A umask that drops the group and others shows a mode the Makefile does not set.
+output="$(umask 077 && make_in_stage install)" || true
 expect "make install gives the binary mode 755" mode 755 \
     "$(stat -c %a "$installed_binary" 2>/dev/null || echo "none, make printed: $output")"
 output="$(make_in_stage uninstall)" || true
