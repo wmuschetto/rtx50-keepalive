@@ -13,7 +13,7 @@
 # NVIDIA GPU, to fail each create in turn. One check feeds the hold report
 # fixed job times. The helpers in tests/ (empty-argv, failed-create, hangup,
 # hold-report, kill-log, slow-fork, unreaped-child) are built with the first
-# compiler that built it.
+# compiler that built it, and the checks run that compiler's build.
 # Exits 1 if any check fails.
 set -euo pipefail
 
@@ -58,7 +58,8 @@ build() {
     "$compiler" -std=c17 -O2 -Wall -Wextra -Wshadow -Wconversion -Werror "$@"
 }
 
-# The first compiler that built it also builds the test helpers.
+# The first compiler that built it also builds the test helpers, and its build is
+# the one the checks run.
 helper_compiler=""
 for compiler in cc gcc clang; do
     if command -v "$compiler" >/dev/null; then
@@ -74,7 +75,7 @@ if [[ -z "$helper_compiler" ]]; then
     echo "FAIL  no compiler built it; nothing else can be tested"
     exit 1
 fi
-keepalive="$(find "$work_dir" -maxdepth 1 -name 'rtx50-keepalive-*' -type f | head -n 1)"
+keepalive="$work_dir/rtx50-keepalive-$helper_compiler"
 
 # Runs the keepalive with the given arguments; sets status, stdout and stderr.
 run() {
