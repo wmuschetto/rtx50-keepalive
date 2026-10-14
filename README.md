@@ -103,10 +103,10 @@ If it cannot start (no NVIDIA GPU, no NVIDIA Vulkan driver), it says so with
 
 ## What it costs
 
-Measured on an RTX 5090 at the desktop: under 1% of one CPU core, 1-4% GPU
-use, and about 15 W more power at idle. In a game the GPU already runs at full
-power. It starts in about a second, alongside the game, and exits within about
-0.3 s of the game.
+Measured on an RTX 5090 at the desktop on 2026-10-13: under 1% of one CPU core,
+1-4% GPU use, and about 15 W more power at idle. In a game the GPU already runs
+at full power. It starts in about a second, alongside the game, and exits within
+about 0.3 s of the game (measured 2026-10-14).
 
 ## How it works
 
