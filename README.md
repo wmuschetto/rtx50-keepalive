@@ -135,8 +135,7 @@ about 0.3 s of the game (measured 2026-10-14).
 
 It doesn't read, inject into or trace the game, and it adds no Vulkan layer to
 it. It is a separate process that starts the game and waits for it. No
-anti-cheat vendor has reviewed it, so use it with online games at your own
-judgment.
+anti-cheat vendor has reviewed it, so use it with online games at your own risk.
 
 ## Limitations
 
