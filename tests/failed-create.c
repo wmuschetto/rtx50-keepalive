@@ -2,15 +2,17 @@
  * Usage: FAILED_CREATE=CREATE LD_PRELOAD=failed-create.so COMMAND [ARGUMENT...]
  *
  * Stands in for the Vulkan loader, with one discrete NVIDIA GPU, in each call
- * the keepalive makes to start, up to its first fence, and to destroy what it
- * started. The create CREATE names (vkCreateInstance, vkCreateDevice,
+ * the keepalive makes to start, to submit its first job, and to destroy what
+ * it started. The create CREATE names (vkCreateInstance, vkCreateDevice,
  * vkCreateBuffer, vkAllocateMemory, vkCreateCommandPool or vkCreateFence)
  * fails after writing a handle it never created: the Vulkan spec leaves a
  * failed command's outputs undefined. A call that gets that handle ends the
- * process with status 66, where a driver might crash it. Any other CREATE
- * ends it with status 2 at vkCreateInstance, so the stand-in's handles never
- * reach the real loader. tests/check.sh builds it as a shared object and
- * preloads it into the keepalive.
+ * process with status 66, where a driver might crash it. With CREATE
+ * vkQueueSubmit every create succeeds and the first submit fails, as a GPU
+ * lost mid-game makes it. Any other CREATE ends it with status 2 at
+ * vkCreateInstance, so the stand-in's handles never reach the real loader.
+ * tests/check.sh builds it as a shared object and preloads it into the
+ * keepalive.
  */
 #include <stdint.h>
 #include <stdio.h>
@@ -24,7 +26,8 @@
 #define EXIT_USAGE 2
 
 static const char *const CREATES[] = {"vkCreateInstance", "vkCreateDevice",      "vkCreateBuffer",
-                                      "vkAllocateMemory", "vkCreateCommandPool", "vkCreateFence"};
+                                      "vkAllocateMemory", "vkCreateCommandPool", "vkCreateFence",
+                                      "vkQueueSubmit"};
 #define CREATE_COUNT (sizeof CREATES / sizeof CREATES[0])
 
 /* Each handle the stand-in hands out is the address of one of these, cast
@@ -190,8 +193,6 @@ VKAPI_ATTR VkResult VKAPI_CALL vkAllocateCommandBuffers(VkDevice device,
     return VK_SUCCESS;
 }
 
-/* The first fence fails, so the keepalive stops before it records a command
- * buffer, which the stand-in has no calls for. */
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateFence(VkDevice device, const VkFenceCreateInfo *info,
                                              const VkAllocationCallbacks *allocator, VkFence *fence) {
     (void)info;
@@ -200,6 +201,46 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateFence(VkDevice device, const VkFenceCreat
     uintptr_t handle = handle_from("vkCreateFence");
     *fence = (VkFence)handle;
     return result_of(handle);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL vkBeginCommandBuffer(VkCommandBuffer commands,
+                                                    const VkCommandBufferBeginInfo *info) {
+    (void)info;
+    CHECK(commands);
+    return VK_SUCCESS;
+}
+
+VKAPI_ATTR void VKAPI_CALL vkCmdFillBuffer(VkCommandBuffer commands, VkBuffer buffer, VkDeviceSize offset,
+                                           VkDeviceSize size, uint32_t data) {
+    (void)offset;
+    (void)size;
+    (void)data;
+    CHECK(commands);
+    CHECK(buffer);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL vkEndCommandBuffer(VkCommandBuffer commands) {
+    CHECK(commands);
+    return VK_SUCCESS;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL vkResetFences(VkDevice device, uint32_t count, const VkFence *fences) {
+    CHECK(device);
+    for (uint32_t index = 0; index < count; index++) {
+        CHECK(fences[index]);
+    }
+    return VK_SUCCESS;
+}
+
+/* The keepalive submits only once every create succeeded, which is with
+ * CREATE vkQueueSubmit. */
+VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit(VkQueue queue, uint32_t count, const VkSubmitInfo *submits,
+                                             VkFence fence) {
+    (void)count;
+    CHECK(queue);
+    CHECK(submits[0].pCommandBuffers[0]);
+    CHECK(fence);
+    return VK_ERROR_DEVICE_LOST;
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL vkDeviceWaitIdle(VkDevice device) {

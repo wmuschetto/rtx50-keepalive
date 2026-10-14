@@ -10,10 +10,11 @@
 # to start, which is the path that must still run the command. One check
 # names a FIFO as the driver file instead, to hold the keepalive in
 # vkCreateInstance, and others preload a stand-in for the loader: one with one
-# NVIDIA GPU, to fail each create in turn, and one with the devices a check
-# lists, to see which GPU it opens. One check feeds the hold report fixed job
-# times, another checks a hold's time against the clock, and one runs the job
-# loop through a hold against stand-ins for the Vulkan calls and the clock.
+# NVIDIA GPU, to fail each create in turn and then the first submit, and one
+# with the devices a check lists, to see which GPU it opens. One check feeds
+# the hold report fixed job times, another checks a hold's time against the
+# clock, and one runs the job loop through a hold against stand-ins for the
+# Vulkan calls and the clock.
 # The helpers in tests/ (device-list, empty-argv, failed-create, failed-fork,
 # hangup, hold-report, hold-start, keepalive-loop, kill-log, slow-fork,
 # unreaped-child) are built with the first compiler that built it, and the
@@ -186,6 +187,21 @@ if build "$helper_compiler" -shared -fPIC -o "$work_dir/failed-create.so" "$repo
             expect "the output of a failed $create is not used" status 5 "$status"
         fi
     done
+    # A keepalive that fails mid-run, as on a lost GPU, frees its device and
+    # waits for its command. With every create done, the stand-in fails the
+    # first submit with VK_ERROR_DEVICE_LOST; the command runs until the
+    # keepalive reports that, or 5 s.
+    status=0
+    env FAILED_CREATE=vkQueueSubmit LD_PRELOAD="$work_dir/failed-create.so" "$keepalive" \
+        sh -c 'for _ in $(seq 500); do grep -q "vkQueueSubmit failed" "$1" && exit 5; sleep 0.01; done' \
+        sh "$work_dir/stderr" >/dev/null 2>"$work_dir/stderr" || status=$?
+    submit_stderr="$(cat "$work_dir/stderr")"
+    if [[ "$submit_stderr" != *"vkQueueSubmit failed (VkResult -4)"* ]]; then
+        fail "the command runs on when the keepalive fails mid-run" \
+            "the keepalive did not reach vkQueueSubmit; stderr was [$submit_stderr]"
+    else
+        expect "the command runs on when the keepalive fails mid-run" status 5 "$status"
+    fi
 else
     fail "the output of a failed create is not used" "tests/failed-create.c did not build"
 fi
