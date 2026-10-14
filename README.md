@@ -74,7 +74,9 @@ rtx50-keepalive %command%
 ```
 
 If the game already has launch options, put `rtx50-keepalive` right before
-`%command%`, e.g. `SOME_SETTING=1 rtx50-keepalive %command%`.
+`%command%`, e.g. `SOME_SETTING=1 rtx50-keepalive %command%`. Options without
+`%command%` are the game's own arguments, so they go after it:
+`rtx50-keepalive %command% -dx12`.
 
 Lutris: in the game's configuration, set System options > Command prefix (an
 advanced option) to `rtx50-keepalive`. Other launchers that accept a wrapper
