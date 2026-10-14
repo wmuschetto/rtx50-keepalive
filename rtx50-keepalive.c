@@ -630,6 +630,9 @@ static int run_with_command(char **command) {
     install_signal_handlers();
     sigprocmask(SIG_SETMASK, &previous, NULL);
 
+    /* After the fork: keepalive_start sets VK_LOADER_LAYERS_DISABLE and raises
+     * the open-file soft limit for this process, which the command must not
+     * inherit. */
     if (keepalive_start(&keepalive) == 0) {
         int result = keepalive_run(&keepalive, command_has_exited);
         keepalive_report(&keepalive);
