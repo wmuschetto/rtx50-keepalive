@@ -617,7 +617,6 @@ static int run_with_command(char **command) {
      * the inherited action back. */
     struct sigaction inherited_on_child;
     struct sigaction default_on_child = {.sa_handler = SIG_DFL};
-    sigemptyset(&default_on_child.sa_mask);
     sigaction(SIGCHLD, &default_on_child, &inherited_on_child);
     pid_t pid = fork();
     if (pid <= 0) {
