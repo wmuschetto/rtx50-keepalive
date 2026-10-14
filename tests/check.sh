@@ -107,9 +107,11 @@ expect_contains() {
     fi
 }
 
-run --help
-expect "--help exits 0" status 0 "$status"
-expect_contains "--help prints the usage" "Usage: rtx50-keepalive COMMAND" "$stdout"
+for option in --help -h; do
+    run "$option"
+    expect "$option exits 0" status 0 "$status"
+    expect_contains "$option prints the usage" "Usage: rtx50-keepalive COMMAND" "$stdout"
+done
 
 run --version
 expect_contains "--version prints the version" "rtx50-keepalive " "$stdout"
@@ -131,6 +133,10 @@ expect "arguments reach the command unchanged" stdout '[a b][][*]["q"]' "$stdout
 
 run -- sh -c 'exit 3'
 expect "-- before the command is accepted" status 3 "$status"
+
+run --
+expect "-- without a command exits 2" status 2 "$status"
+expect_contains "-- without a command prints the usage" "Usage: rtx50-keepalive COMMAND" "$stderr"
 
 run sh -c 'echo "${VK_LOADER_LAYERS_DISABLE-unset}"'
 expect "the command's environment is left as it was" stdout unset "$stdout"
