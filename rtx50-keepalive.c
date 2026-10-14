@@ -118,10 +118,9 @@ static volatile sig_atomic_t command_pid = 0;
 /* Set with command_pid: whether this process leads its session. */
 static volatile sig_atomic_t leads_session = 0;
 static volatile sig_atomic_t stop_requested = 0;
-/* The command's exit as waitid reports it; si_pid is 0 until it has exited. */
+/* The command's exit as waitid reports it; si_pid is 0 until it has exited,
+ * and stays 0 when waitid fails. */
 static siginfo_t command_exit;
-/* Set when waitid fails and the command's status cannot be known. */
-static int command_status_lost;
 
 static void on_stop_signal(int signal_number, siginfo_t *info, void *context) {
     (void)context;
@@ -568,7 +567,6 @@ static int command_exited(int wait) {
         if (errno != EINTR) {
             fprintf(stderr, PROGRAM ": waitid failed (%s); the command's exit status is lost\n",
                     strerror(errno));
-            command_status_lost = 1;
             return 1;
         }
     }
@@ -584,7 +582,7 @@ static int stop_was_requested(void) {
 
 /* The command's exit status, or 128 plus the signal that ended it, as shells report it. */
 static int exit_status_of_command(void) {
-    if (command_status_lost) {
+    if (command_exit.si_pid == 0) { /* waitid failed: the status is lost */
         return EXIT_FAILURE;
     }
     if (command_exit.si_code == CLD_EXITED) {
