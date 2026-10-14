@@ -9,9 +9,10 @@
 # kept from the drivers a loader settings file adds, so the keepalive fails
 # to start, which is the path that must still run the command. One check
 # names a FIFO as the driver file instead, to hold the keepalive in
-# vkCreateInstance. The helpers in tests/ (empty-argv, failed-create, hangup,
-# kill-log, slow-fork, unreaped-child) are built with the first compiler that
-# built it.
+# vkCreateInstance, and others preload a stand-in for the loader with one
+# NVIDIA GPU, to fail each create in turn. The helpers in tests/ (empty-argv,
+# failed-create, hangup, kill-log, slow-fork, unreaped-child) are built with
+# the first compiler that built it.
 # Exits 1 if any check fails.
 set -euo pipefail
 
@@ -147,15 +148,31 @@ expect_contains "the failed start is reported on stderr" "the keepalive is off" 
 
 # A failed create may leave a handle it never created in its output, and
 # destroying that would crash the keepalive and orphan the command.
-# failed-create.so makes vkCreateInstance do that and exits 66 if the handle is
-# destroyed.
-set +e
-"$helper_compiler" -std=c17 -O2 -Wall -Wextra -Wshadow -Wconversion -Werror -shared -fPIC \
-    -o "$work_dir/failed-create.so" "$repo_dir/tests/failed-create.c" &&
-    env LD_PRELOAD="$work_dir/failed-create.so" "$keepalive" sh -c 'exit 5' >/dev/null 2>&1
-status=$?
-set -e
-expect "the output of a failed create is not destroyed" status 5 "$status"
+# failed-create.so stands in for the loader with one NVIDIA GPU, makes the
+# create FAILED_CREATE names do that, and exits 66 when a call gets the handle.
+# The keepalive's report shows it reached that create: under a hard open-file
+# limit too low for its fences it stops before any. VkResult -3 is the
+# stand-in's; the loader itself fails vkCreateInstance with -9 here.
+if "$helper_compiler" -std=c17 -O2 -Wall -Wextra -Wshadow -Wconversion -Werror -shared -fPIC \
+    -o "$work_dir/failed-create.so" "$repo_dir/tests/failed-create.c"; then
+    for create in vkCreateInstance vkCreateDevice vkCreateBuffer vkAllocateMemory vkCreateCommandPool \
+        vkCreateFence; do
+        set +e
+        env FAILED_CREATE="$create" LD_PRELOAD="$work_dir/failed-create.so" "$keepalive" sh -c 'exit 5' \
+            >/dev/null 2>"$work_dir/stderr"
+        status=$?
+        set -e
+        create_stderr="$(cat "$work_dir/stderr")"
+        if [[ "$create_stderr" != *"$create failed (VkResult -3)"* ]]; then
+            fail "the output of a failed $create is not used" \
+                "the keepalive did not reach $create; stderr was [$create_stderr]"
+        else
+            expect "the output of a failed $create is not used" status 5 "$status"
+        fi
+    done
+else
+    fail "the output of a failed create is not used" "tests/failed-create.c did not build"
+fi
 
 set +e
 output="$(echo hello | "$keepalive" cat 2>/dev/null)"
@@ -369,7 +386,7 @@ mask_has() {
 # since a background job starts with SIGINT and SIGQUIT ignored.
 mkfifo "$work_dir/stalled-driver.json"
 VK_DRIVER_FILES="$work_dir/stalled-driver.json" VK_ICD_FILENAMES="$work_dir/stalled-driver.json" \
-    env --ignore-signal=HUP "$keepalive" >/dev/null 2>&1 &
+    env --ignore-signal=HUP "$keepalive" >/dev/null 2>"$work_dir/stderr" &
 wrapper_pid=$!
 sleep 0.5
 ignored_mask="" caught_mask=""
@@ -380,7 +397,7 @@ wait "$wrapper_pid" 2>/dev/null || true
 wrapper_pid=""
 if [[ -z "$caught_mask" ]]; then
     fail "without a command, a SIGHUP ignored on entry stays ignored" \
-        "it exited before the check, so the loader did not wait on the FIFO"
+        "it exited before the check; its stderr was [$(cat "$work_dir/stderr")]"
 elif ! mask_has "$caught_mask" TERM; then
     fail "without a command, a SIGHUP ignored on entry stays ignored" \
         "SigCgt was $caught_mask, without SIGTERM's bit: its signal handlers were not in place yet"
