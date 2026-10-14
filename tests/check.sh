@@ -27,6 +27,12 @@ clean_up() {
     rm -rf "$work_dir"
 }
 trap clean_up EXIT
+# LD_PRELOAD splits its value at spaces and colons, and a helper it cannot load
+# is skipped, so its check would pass without testing anything.
+if [[ "$work_dir" == *[[:space:]:]* ]]; then
+    echo "FAIL  the work directory $work_dir has a space or colon, which LD_PRELOAD cannot carry; set TMPDIR to a folder without one"
+    exit 1
+fi
 # The loader reads VK_DRIVER_FILES (1.3.207 and later) or VK_ICD_FILENAMES (older).
 export VK_DRIVER_FILES="$work_dir/no-such-driver.json"
 export VK_ICD_FILENAMES="$VK_DRIVER_FILES"
