@@ -26,7 +26,7 @@
 #define GIVE_UP_AFTER_MS 5000
 #define POLL_MS 50
 /* The interrupt character of a new terminal (VINTR). */
-#define CONTROL_C '\003'
+#define CONTROL_C "\003"
 #define EXIT_USAGE 2
 #define EXIT_TIMED_OUT 124
 #define EXIT_SIGNALED_BASE 128
@@ -79,8 +79,7 @@ int main(int argc, char **argv) {
     sleep_ms(SIGNAL_AFTER_MS);
     if (interrupt) {
         /* The terminal sends SIGINT to its whole foreground process group. */
-        const char control_c = CONTROL_C;
-        if (write(terminal, &control_c, 1) != 1) {
+        if (write(terminal, CONTROL_C, 1) != 1) {
             perror("hangup: cannot type Ctrl-C");
         }
     } else {
