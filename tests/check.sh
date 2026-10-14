@@ -11,9 +11,10 @@
 # keepalive fails to start, which is the path that must still run the command.
 # One check names a FIFO as the driver file instead, to hold the keepalive in
 # vkCreateInstance, and others preload a stand-in for the loader: one with one
-# NVIDIA GPU, to fail each create in turn and then the first submit and count
-# what is destroyed, and one with the devices a check lists, to see which GPU
-# it opens. One check feeds the hold report fixed job times, another checks a
+# NVIDIA GPU, to fail each create in turn and then the first submit, count
+# what is destroyed and check that the keepalive turns off implicit layers,
+# and one with the devices a check lists, to see which GPU it opens. One
+# check feeds the hold report fixed job times, another checks a
 # hold's time against the clock, and one runs the job loop through a hold
 # against stand-ins for the Vulkan calls and the clock. The helpers in tests/
 # (device-list, empty-argv, failed-create, failed-fork, hangup, hold-report,
@@ -179,6 +180,8 @@ fi
 # create FAILED_CREATE names do that (for vkCreateFence, the second fence's),
 # exits 66 when a call gets the handle, and exits 68 when an object is
 # destroyed after its parent or left at exit.
+# It exits 69 at vkCreateInstance when the keepalive has not set
+# VK_LOADER_LAYERS_DISABLE to ~all~.
 # The keepalive's report shows it reached that create: under a hard open-file
 # limit too low for its fences it stops before any. VkResult -3 is the
 # stand-in's; the loader itself fails vkCreateInstance with -9 here.

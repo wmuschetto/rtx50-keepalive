@@ -10,9 +10,10 @@
  * that handle ends the process with status 66, where a driver might crash it.
  * With CREATE vkQueueSubmit every create succeeds and the first submit fails,
  * as a GPU lost mid-game makes it. An object destroyed after its parent, or
- * left at exit, ends the process with status 68. Any other CREATE ends it
- * with status 2 at vkCreateInstance, so the stand-in's handles never reach
- * the real loader.
+ * left at exit, ends the process with status 68. vkCreateInstance ends it
+ * with status 69 when the keepalive has not set VK_LOADER_LAYERS_DISABLE to
+ * ~all~. Any other CREATE ends it with status 2 at vkCreateInstance, so the
+ * stand-in's handles never reach the real loader.
  * tests/check.sh builds it as a shared object and preloads it into the
  * keepalive.
  */
@@ -26,6 +27,7 @@
 /* Exiting, not aborting, leaves no core dump behind. */
 #define EXIT_GOT_NEVER_CREATED 66
 #define EXIT_NOT_DESTROYED 68
+#define EXIT_LAYERS_NOT_DISABLED 69
 #define EXIT_USAGE 2
 
 static const char *const CREATES[] = {"vkCreateInstance", "vkCreateDevice",      "vkCreateBuffer",
@@ -104,6 +106,14 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateInstance(const VkInstanceCreateInfo *info
                         "vkCreateDevice\n",
                 failed_create == NULL ? "" : failed_create);
         _Exit(EXIT_USAGE);
+    }
+    /* Checked here because the keepalive sets it for itself alone: it shows
+     * neither in the command's environment nor in /proc/PID/environ. */
+    const char *layers_disabled = getenv("VK_LOADER_LAYERS_DISABLE");
+    if (layers_disabled == NULL || strcmp(layers_disabled, "~all~") != 0) {
+        fprintf(stderr, "failed-create: VK_LOADER_LAYERS_DISABLE is [%s], expected [~all~]\n",
+                layers_disabled == NULL ? "" : layers_disabled);
+        _Exit(EXIT_LAYERS_NOT_DISABLED);
     }
     uintptr_t handle = handle_from("vkCreateInstance");
     *instance = (VkInstance)handle;

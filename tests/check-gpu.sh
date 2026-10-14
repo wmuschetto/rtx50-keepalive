@@ -7,7 +7,10 @@
 # hold, and loads no Vulkan layer even when the environment asks for Steam's
 # overlay or MangoHud. Needs an NVIDIA GPU with its Vulkan driver and Vulkan
 # loader 1.3.234 or later (an older loader keeps the layers on, so the last
-# check fails); run it with no game running. Exits 1 if any check fails.
+# check fails); run it with no game running. The last check has a layer to keep
+# out only where Steam's overlay, MangoHud or Mesa's device_select is installed;
+# make check covers the setting behind it on any machine. Exits 1 if any check
+# fails.
 set -euo pipefail
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
