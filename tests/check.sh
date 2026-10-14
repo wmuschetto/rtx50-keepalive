@@ -12,9 +12,10 @@
 # vkCreateInstance, and others preload a stand-in for the loader: one with one
 # NVIDIA GPU, to fail each create in turn, and one with the devices a check
 # lists, to see which GPU it opens. One check feeds the hold report fixed job
-# times. The helpers in tests/ (device-list, empty-argv, failed-create,
-# hangup, hold-report, kill-log, slow-fork, unreaped-child) are built with the
-# first compiler that built it, and the checks run that compiler's build.
+# times, and another checks a hold's time against the clock. The helpers in
+# tests/ (device-list, empty-argv, failed-create, hangup, hold-report,
+# hold-start, kill-log, slow-fork, unreaped-child) are built with the first
+# compiler that built it, and the checks run that compiler's build.
 # Exits 1 if any check fails.
 set -euo pipefail
 
@@ -385,8 +386,8 @@ fi
 # The hold report comes from the keepalive's bookkeeping alone, which needs no
 # GPU: hold-report feeds it job times against the 20 ms limit, and the times
 # in tests/hold-report.c make three holds. A hold's time is masked, since it
-# is the wall-clock time the hold began. -Wno-unused-function: the helper
-# calls only part of the keepalive's source.
+# is the wall-clock time the hold began; hold-start checks it.
+# -Wno-unused-function: the helper calls only part of the keepalive's source.
 hold_report_wanted="rtx50-keepalive: TIME hold: 2 jobs late, longest fence 45.0 ms
 rtx50-keepalive: TIME hold: 1 jobs late, longest fence 21.0 ms
 rtx50-keepalive: TIME hold: 2 jobs late, longest fence 25.0 ms
@@ -399,6 +400,17 @@ if build "$helper_compiler" -Wno-unused-function \
 else
     fail "consecutive late jobs make one hold, and the report counts each" \
         "tests/hold-report.c did not build"
+fi
+
+# A hold's time is when its first late job was submitted: hold-start checks
+# that time against the clock.
+status=0
+if build "$helper_compiler" -Wno-unused-function \
+    -o "$work_dir/hold-start" "$repo_dir/tests/hold-start.c" -lvulkan; then
+    "$work_dir/hold-start" || status=$?
+    expect "a hold's time is when its first late job was submitted" status 0 "$status"
+else
+    fail "a hold's time is when its first late job was submitted" "tests/hold-start.c did not build"
 fi
 
 # Whether a signal mask from /proc/PID/status (hexadecimal) holds the named signal.
