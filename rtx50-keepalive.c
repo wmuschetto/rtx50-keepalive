@@ -150,10 +150,7 @@ static const int STOP_SIGNALS[] = {SIGTERM, SIGINT, SIGHUP, SIGQUIT};
 #define STOP_SIGNAL_COUNT (sizeof STOP_SIGNALS / sizeof STOP_SIGNALS[0])
 
 static void install_signal_handlers(void) {
-    struct sigaction on_stop;
-    memset(&on_stop, 0, sizeof on_stop);
-    on_stop.sa_sigaction = on_stop_signal;
-    on_stop.sa_flags = SA_SIGINFO | SA_RESTART;
+    struct sigaction on_stop = {.sa_sigaction = on_stop_signal, .sa_flags = SA_SIGINFO | SA_RESTART};
     sigemptyset(&on_stop.sa_mask);
     for (size_t index = 0; index < STOP_SIGNAL_COUNT; index++) {
         struct sigaction inherited;
@@ -165,12 +162,9 @@ static void install_signal_handlers(void) {
         }
         sigaction(STOP_SIGNALS[index], &on_stop, NULL);
     }
-    struct sigaction on_child;
-    memset(&on_child, 0, sizeof on_child);
-    on_child.sa_handler = on_child_signal;
     /* SA_RESTART keeps the driver's own system calls going; clock_nanosleep
      * returns EINTR regardless, which is what wakes the keepalive. */
-    on_child.sa_flags = SA_NOCLDSTOP | SA_RESTART;
+    struct sigaction on_child = {.sa_handler = on_child_signal, .sa_flags = SA_NOCLDSTOP | SA_RESTART};
     sigemptyset(&on_child.sa_mask);
     sigaction(SIGCHLD, &on_child, NULL);
 }
@@ -621,9 +615,8 @@ static int run_with_command(char **command) {
     /* An inherited SIG_IGN lets the kernel reap a command that exits before
      * install_signal_handlers, and its exit status is lost. The command gets
      * the inherited action back. */
-    struct sigaction inherited_on_child, default_on_child;
-    memset(&default_on_child, 0, sizeof default_on_child);
-    default_on_child.sa_handler = SIG_DFL;
+    struct sigaction inherited_on_child;
+    struct sigaction default_on_child = {.sa_handler = SIG_DFL};
     sigemptyset(&default_on_child.sa_mask);
     sigaction(SIGCHLD, &default_on_child, &inherited_on_child);
     pid_t pid = fork();
