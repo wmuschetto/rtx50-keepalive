@@ -197,6 +197,27 @@ wrapper_pid=$!
 sleep 0.5
 expect_sigterm_passed_on "SIGTERM is passed on to the command" 7
 
+# A stop signal sent before the handlers are in place is held until they are,
+# then passed on: slow-fork.so holds the keepalive for 300 ms after its fork.
+# The command writes its pid to descriptor 3 once it runs.
+held_pid_file="$work_dir/held-signal-command.pid"
+env LD_PRELOAD="$work_dir/slow-fork.so" "$keepalive" \
+    sh -c 'trap "exit 7" TERM; echo $$ >&3; while :; do sleep 0.05; done' \
+    >/dev/null 2>&1 3>"$held_pid_file" &
+wrapper_pid=$!
+# The pid means the fork is done and the keepalive is in its 300 ms hold.
+for _ in $(seq 100); do
+    if [[ -s "$held_pid_file" ]]; then
+        break
+    fi
+    sleep 0.01
+done
+expect_sigterm_passed_on "a SIGTERM sent before the handlers are in place is passed on" 7
+# A keepalive that died of the signal left its command running.
+if [[ "$status" == 143 ]]; then
+    kill -KILL "$(cat "$held_pid_file")" 2>/dev/null || true
+fi
+
 # With a command, a stop signal ignored on entry is still caught and passed on,
 # since a game sets its own handlers. A shell cannot trap a signal ignored on
 # entry, so env gives the command's shell the default back.
