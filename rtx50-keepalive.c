@@ -304,7 +304,6 @@ static void keepalive_destroy(Keepalive *k) {
     if (k->instance != VK_NULL_HANDLE) {
         vkDestroyInstance(k->instance, NULL);
     }
-    *k = (Keepalive){0};
 }
 
 static int create_device(Keepalive *k, VkPhysicalDeviceProperties *properties, VkPhysicalDevice *gpu,
