@@ -28,9 +28,7 @@ build -DLATE_FENCE_MS=0 -o "$work_dir/rtx50-keepalive-every-fence-late"
 keepalive="$work_dir/rtx50-keepalive"
 
 # Standalone, under the soft limit systemd gives its units.
-set +e
-(ulimit -Sn 1024 && timeout -s INT 2 "$keepalive" 2>"$work_dir/standalone")
-set -e
+(ulimit -Sn 1024 && timeout -s INT 2 "$keepalive" 2>"$work_dir/standalone") || true
 standalone="$(cat "$work_dir/standalone")"
 # Jobs above 0: a stop signal during a slow start ends the keepalive before its first job.
 jobs_pattern='; ([0-9]+) jobs, 0 late in 0 holds'
@@ -54,9 +52,7 @@ else
     fail "stops within 1 s of its command's exit" "took ${elapsed_ms} ms; stderr was [$with_command]"
 fi
 
-set +e
-(timeout -s INT 2 "$work_dir/rtx50-keepalive-every-fence-late" 2>"$work_dir/hold")
-set -e
+timeout -s INT 2 "$work_dir/rtx50-keepalive-every-fence-late" 2>"$work_dir/hold" || true
 if grep -q ' hold: [0-9]* jobs late, longest fence ' "$work_dir/hold"; then
     pass "reports a hold"
 else
