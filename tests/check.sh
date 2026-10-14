@@ -310,7 +310,7 @@ expect_signal_passed_on() {
     wait "$wrapper_pid" || status=$?
     wrapper_pid=""
     if [[ "$timed_out" -eq 1 ]]; then
-        fail "$name" "the command was still running 5 s later"
+        fail "$name" "the keepalive was still running 5 s later"
     else
         expect "$name" status "$wanted" "$status"
     fi
