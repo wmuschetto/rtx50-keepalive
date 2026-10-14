@@ -43,6 +43,9 @@ int main(int argc, char **argv) {
         return EXIT_USAGE;
     }
     char **command = argv + 1 + interrupt;
+    /* An ignored SIGCHLD inherited from the launcher lets the kernel reap
+     * COMMAND, and waitpid then never returns its status. */
+    signal(SIGCHLD, SIG_DFL);
     /* A process whose parent exits is handed to this one, so it can wait for
      * what COMMAND left behind: a shell that leads the session dies of the
      * hangup before the processes it started. */
