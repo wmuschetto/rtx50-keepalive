@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Usage: tests/check.sh
 #
-# Builds rtx50-keepalive with warnings as errors (with every compiler found
-# among cc, gcc and clang) and tests how it runs a command and handles
-# signals, what make, make install and make uninstall do (in a folder under
-# its work directory), and the CI workflow's token, pins and credentials.
+# Builds rtx50-keepalive with warnings as errors (with each of cc, gcc and
+# clang that is installed; in CI, a missing one fails) and tests how it runs a
+# command and handles signals, what make, make install and make uninstall do
+# (in a folder under its work directory), and the CI workflow's token, pins
+# and credentials.
 # Needs no GPU: the Vulkan loader is pointed at a driver file that does not
 # exist and kept from the drivers a loader settings file adds, so the
 # keepalive fails to start, which is the path that must still run the command.
@@ -66,13 +67,17 @@ build() {
 # the one the checks run.
 helper_compiler=""
 for compiler in cc gcc clang; do
-    if command -v "$compiler" >/dev/null; then
-        if build "$compiler" -o "$work_dir/rtx50-keepalive-$compiler" "$repo_dir/rtx50-keepalive.c" -lvulkan; then
-            pass "builds with $compiler and -Werror"
-            helper_compiler="${helper_compiler:-$compiler}"
+    if ! command -v "$compiler" >/dev/null; then
+        if [[ -n "${CI:-}" ]]; then
+            fail "builds with $compiler and -Werror" "$compiler is not installed"
         else
-            fail "builds with $compiler and -Werror" "see the compiler output above"
+            echo "skip  $compiler is not installed"
         fi
+    elif build "$compiler" -o "$work_dir/rtx50-keepalive-$compiler" "$repo_dir/rtx50-keepalive.c" -lvulkan; then
+        pass "builds with $compiler and -Werror"
+        helper_compiler="${helper_compiler:-$compiler}"
+    else
+        fail "builds with $compiler and -Werror" "see the compiler output above"
     fi
 done
 if [[ -z "$helper_compiler" ]]; then
