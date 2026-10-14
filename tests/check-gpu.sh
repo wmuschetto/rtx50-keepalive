@@ -3,11 +3,11 @@
 #
 # Runs rtx50-keepalive on this machine's NVIDIA GPU for a few seconds at a
 # time: it starts and stops cleanly under a 1024 open-file soft limit, stops
-# when its command exits, reports a hold, and loads no Vulkan layer even when
-# the environment asks for Steam's overlay or MangoHud. Needs an NVIDIA GPU
-# with its Vulkan driver and Vulkan loader 1.3.234 or later (an older loader
-# keeps the layers on, so the last check fails); run it with no game running.
-# Exits 1 if any check fails.
+# when its command exits and passes on the command's exit status, reports a
+# hold, and loads no Vulkan layer even when the environment asks for Steam's
+# overlay or MangoHud. Needs an NVIDIA GPU with its Vulkan driver and Vulkan
+# loader 1.3.234 or later (an older loader keeps the layers on, so the last
+# check fails); run it with no game running. Exits 1 if any check fails.
 set -euo pipefail
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -45,16 +45,18 @@ else
 fi
 
 started_ns="$(date +%s%N)"
-"$keepalive" sleep 2 2>"$work_dir/with-command"
+command_status=0
+"$keepalive" sh -c 'sleep 2; exit 42' 2>"$work_dir/with-command" || command_status=$?
 elapsed_ms=$(( ($(date +%s%N) - started_ns) / 1000000 ))
 with_command="$(cat "$work_dir/with-command")"
 # Jobs above 0: a start that outlasts the command ends the keepalive before its first job.
 jobs_pattern='stopped after [0-9]+ s; ([0-9]+) jobs'
-if [[ "$with_command" != *"the keepalive is off"* && "$with_command" =~ $jobs_pattern &&
-    "${BASH_REMATCH[1]}" -gt 0 && "$elapsed_ms" -lt 3000 ]]; then
-    pass "stops within 1 s of its command's exit (${elapsed_ms} ms for a 2 s command)"
+if [[ "$command_status" -eq 42 && "$with_command" != *"the keepalive is off"* &&
+    "$with_command" =~ $jobs_pattern && "${BASH_REMATCH[1]}" -gt 0 && "$elapsed_ms" -lt 3000 ]]; then
+    pass "stops within 1 s of its command's exit, with its status (${elapsed_ms} ms for a 2 s command)"
 else
-    fail "stops within 1 s of its command's exit" "took ${elapsed_ms} ms; stderr was [$with_command]"
+    fail "stops within 1 s of its command's exit, with its status" \
+        "status $command_status (expected 42) after ${elapsed_ms} ms; stderr was [$with_command]"
 fi
 
 timeout -s INT 2 "$work_dir/rtx50-keepalive-every-fence-late" 2>"$work_dir/hold" || true
