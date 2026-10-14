@@ -353,11 +353,9 @@ hold_report_wanted="rtx50-keepalive: TIME hold: 2 jobs late, longest fence 45.0 
 rtx50-keepalive: TIME hold: 1 jobs late, longest fence 21.0 ms
 rtx50-keepalive: TIME hold: 2 jobs late, longest fence 25.0 ms
 rtx50-keepalive: stopped after 0 s; 8 jobs, 5 late in 3 holds, longest fence 45.0 ms"
-if "$helper_compiler" -std=c17 -O2 -Wall -Wextra -Wshadow -Wconversion -Werror -Wno-unused-function \
+if build "$helper_compiler" -Wno-unused-function \
     -o "$work_dir/hold-report" "$repo_dir/tests/hold-report.c" -lvulkan; then
-    set +e
-    output="$("$work_dir/hold-report" 2>&1 | sed -E 's/[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}/TIME/')"
-    set -e
+    output="$("$work_dir/hold-report" 2>&1 | sed -E 's/[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}/TIME/')" || true
     expect "consecutive late jobs make one hold, and the report counts each" stdout \
         "$hold_report_wanted" "$output"
 else
