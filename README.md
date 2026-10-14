@@ -114,8 +114,8 @@ about 0.3 s of the game (measured 2026-10-14).
 
 ## How it works
 
-- It starts the game command as a child process, with the environment it was
-  given, and opens its own Vulkan device on the first discrete NVIDIA GPU.
+- With a command, it starts the game as a child process, with the environment
+  it was given. It opens its own Vulkan device on the first discrete NVIDIA GPU.
 - Every 5 ms it submits a 4-byte `vkCmdFillBuffer` and waits up to 5 ms on that
   job's fence. Up to 2048 jobs can be in flight, so it keeps submitting through
   a 10 s hold.
@@ -129,7 +129,8 @@ about 0.3 s of the game (measured 2026-10-14).
   `VK_LOADER_LAYERS_ALLOW` (loader 1.3.262 or later) exempts the layers it
   names.
 - It passes SIGTERM, SIGINT, SIGHUP and SIGQUIT sent to it on to the game, and
-  exits with the game's exit status.
+  exits with the game's exit status. With no command, they stop it instead (one
+  its launcher ignores stays ignored).
 
 ## Anti-cheat
 
