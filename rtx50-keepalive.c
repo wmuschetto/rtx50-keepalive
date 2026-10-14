@@ -67,7 +67,7 @@
 #define NANOSECONDS_PER_MILLISECOND 1000000LL
 #define NANOSECONDS_PER_SECOND 1000000000LL
 
-/* Exit statuses for a command that could not be started, as POSIX shells use them. */
+/* Exit statuses as shells use them. */
 #define EXIT_NOT_FOUND 127
 #define EXIT_NOT_EXECUTABLE 126
 #define EXIT_USAGE 2
