@@ -78,10 +78,8 @@ keepalive="$(find "$work_dir" -maxdepth 1 -name 'rtx50-keepalive-*' -type f | he
 
 # Runs the keepalive with the given arguments; sets status, stdout and stderr.
 run() {
-    set +e
-    "$keepalive" "$@" >"$work_dir/stdout" 2>"$work_dir/stderr" </dev/null
-    status=$?
-    set -e
+    status=0
+    "$keepalive" "$@" >"$work_dir/stdout" 2>"$work_dir/stderr" </dev/null || status=$?
     stdout="$(cat "$work_dir/stdout")"
     stderr="$(cat "$work_dir/stderr")"
 }
@@ -137,9 +135,7 @@ low_limit=1024
 if [[ "$(ulimit -Hn)" != unlimited && "$(ulimit -Hn)" -le "$low_limit" ]]; then
     low_limit="$(( $(ulimit -Hn) - 1 ))"
 fi
-set +e
-output="$(ulimit -Sn "$low_limit" && "$keepalive" sh -c 'ulimit -Sn' 2>/dev/null)"
-set -e
+output="$(ulimit -Sn "$low_limit" && "$keepalive" sh -c 'ulimit -Sn' 2>/dev/null)" || true
 expect "the command's open-file limit is left as it was" stdout "$low_limit" "$output"
 
 run sh -c 'echo ran'
@@ -156,11 +152,9 @@ expect_contains "the failed start is reported on stderr" "the keepalive is off" 
 if build "$helper_compiler" -shared -fPIC -o "$work_dir/failed-create.so" "$repo_dir/tests/failed-create.c"; then
     for create in vkCreateInstance vkCreateDevice vkCreateBuffer vkAllocateMemory vkCreateCommandPool \
         vkCreateFence; do
-        set +e
+        status=0
         env FAILED_CREATE="$create" LD_PRELOAD="$work_dir/failed-create.so" "$keepalive" sh -c 'exit 5' \
-            >/dev/null 2>"$work_dir/stderr"
-        status=$?
-        set -e
+            >/dev/null 2>"$work_dir/stderr" || status=$?
         create_stderr="$(cat "$work_dir/stderr")"
         if [[ "$create_stderr" != *"$create failed (VkResult -3)"* ]]; then
             fail "the output of a failed $create is not used" \
@@ -173,9 +167,7 @@ else
     fail "the output of a failed create is not used" "tests/failed-create.c did not build"
 fi
 
-set +e
-output="$(echo hello | "$keepalive" cat 2>/dev/null)"
-set -e
+output="$(echo hello | "$keepalive" cat 2>/dev/null)" || true
 expect "stdin reaches the command" stdout hello "$output"
 
 run "$work_dir/no-such-command"
@@ -189,12 +181,10 @@ expect "a command that is not executable exits 126" status 126 "$status"
 # A launcher can leave SIGCHLD ignored, and an ignored SIGCHLD lets the kernel
 # reap a child at once. slow-fork.so holds the keepalive for 300 ms after its
 # fork, so the command exits before the signal handlers are in place.
-set +e
+status=0
 build "$helper_compiler" -shared -fPIC -o "$work_dir/slow-fork.so" "$repo_dir/tests/slow-fork.c" -ldl &&
     env --ignore-signal=CHLD LD_PRELOAD="$work_dir/slow-fork.so" \
-        "$keepalive" "$work_dir/no-such-command" >/dev/null 2>&1
-status=$?
-set -e
+        "$keepalive" "$work_dir/no-such-command" >/dev/null 2>&1 || status=$?
 expect "a quick command's exit status survives an inherited ignored SIGCHLD" status 127 "$status"
 
 # Sends the named signal (TERM, INT, ...) to the keepalive running in the
@@ -214,10 +204,8 @@ expect_signal_passed_on() {
         timed_out=1
     fi
     kill -KILL -- "-$wrapper_pid" 2>/dev/null || true
-    set +e
-    wait "$wrapper_pid"
-    status=$?
-    set -e
+    status=0
+    wait "$wrapper_pid" || status=$?
     wrapper_pid=""
     if [[ "$timed_out" -eq 1 ]]; then
         fail "$name" "the command was still running 5 s later"
@@ -257,11 +245,9 @@ expect_signal_passed_on TERM "a SIGTERM sent before the handlers are in place is
 # The command gets the launcher's signal handling: an ignored SIGCHLD is
 # restored after the fork, and the stop signals and the mask are left alone.
 launcher_signals=(--ignore-signal=CHLD --ignore-signal=HUP --block-signal=USR1)
-set +e
-expected="$(env "${launcher_signals[@]}" cat /proc/self/status | grep -E '^Sig(Ign|Blk):')"
+expected="$(env "${launcher_signals[@]}" cat /proc/self/status | grep -E '^Sig(Ign|Blk):')" || true
 output="$(env "${launcher_signals[@]}" "$keepalive" cat /proc/self/status 2>/dev/null |
-    grep -E '^Sig(Ign|Blk):')"
-set -e
+    grep -E '^Sig(Ign|Blk):')" || true
 if [[ -z "$expected" ]]; then
     # --block-signal needs GNU coreutils 8.31 or later.
     fail "the command's ignored and blocked signals are the launcher's" "env cannot set them"
@@ -293,35 +279,29 @@ expect_not_passed_on() {
 
 # A terminal emulator runs the keepalive as the leader of a new session; when
 # the window closes, the kernel sends SIGHUP to the leader alone.
-set +e
+status=0
 build "$helper_compiler" -o "$work_dir/hangup" "$repo_dir/tests/hangup.c" &&
-    "$work_dir/hangup" "$keepalive" sh -c 'trap "exit 9" HUP; while :; do sleep 0.05; done' >/dev/null 2>&1
-status=$?
-set -e
+    "$work_dir/hangup" "$keepalive" sh -c 'trap "exit 9" HUP; while :; do sleep 0.05; done' >/dev/null 2>&1 || status=$?
 expect "a terminal's hangup is passed on to the command" status 9 "$status"
 
 # The terminal's Ctrl-C goes to its whole foreground process group, the command
 # included, so passing it on would deliver it twice. kill-log.so logs each
 # kill() the keepalive makes.
-set +e
+status=0
 build "$helper_compiler" -shared -fPIC -o "$work_dir/kill-log.so" "$repo_dir/tests/kill-log.c" -ldl &&
     "$work_dir/hangup" --interrupt \
         env LD_PRELOAD="$work_dir/kill-log.so" KILL_LOG="$work_dir/interrupt-kills.log" \
-        "$keepalive" sh -c 'trap "exit 9" INT; while :; do sleep 0.05; done' >/dev/null 2>&1
-status=$?
-set -e
+        "$keepalive" sh -c 'trap "exit 9" INT; while :; do sleep 0.05; done' >/dev/null 2>&1 || status=$?
 expect_not_passed_on "Ctrl-C is not passed on to the command" 9 "$work_dir/interrupt-kills.log"
 
 # When a shell leads the session, the hangup's SIGHUP ends the shell, and the
 # kernel then sends SIGHUP to the shell's whole process group, the keepalive
 # and its command included. hangup exits with the shell's 128+1 once they have
 # all exited.
-set +e
+status=0
 "$work_dir/hangup" sh -c '"$@"; exit' sh \
     env LD_PRELOAD="$work_dir/kill-log.so" KILL_LOG="$work_dir/shell-hangup-kills.log" \
-    "$keepalive" sh -c 'trap "exit 9" HUP; while :; do sleep 0.05; done' >/dev/null 2>&1
-status=$?
-set -e
+    "$keepalive" sh -c 'trap "exit 9" HUP; while :; do sleep 0.05; done' >/dev/null 2>&1 || status=$?
 expect_not_passed_on "a hangup's SIGHUP is not passed on when a shell leads the session" 129 \
     "$work_dir/shell-hangup-kills.log"
 
@@ -345,11 +325,9 @@ fi
 # The command's pid stays taken until the keepalive exits, so a stop signal
 # passed on after the command exited cannot reach a process that took the pid
 # over. unreaped-child.so exits 67 if the command was reaped before then.
-set +e
+status=0
 build "$helper_compiler" -shared -fPIC -o "$work_dir/unreaped-child.so" "$repo_dir/tests/unreaped-child.c" &&
-    env LD_PRELOAD="$work_dir/unreaped-child.so" "$keepalive" sh -c 'exit 5' >/dev/null 2>&1
-status=$?
-set -e
+    env LD_PRELOAD="$work_dir/unreaped-child.so" "$keepalive" sh -c 'exit 5' >/dev/null 2>&1 || status=$?
 expect "the command is not reaped before the keepalive exits" status 5 "$status"
 
 run
@@ -359,9 +337,7 @@ expect "without a command and without a GPU it exits 1" status 1 "$status"
 # have it) gives a program run with an empty argv argc 0 and its environment
 # right after argv[0]; that environment is not a command.
 if build "$helper_compiler" -o "$work_dir/empty-argv" "$repo_dir/tests/empty-argv.c" -lvulkan; then
-    set +e
-    output="$("$work_dir/empty-argv" 2>/dev/null)"
-    set -e
+    output="$("$work_dir/empty-argv" 2>/dev/null)" || true
     expect "an empty argv runs no command" stdout "" "$output"
 else
     fail "an empty argv runs no command" "tests/empty-argv.c did not build"
@@ -432,10 +408,8 @@ make_dry_run() {
 # make install and uninstall refuse a PREFIX or DESTDIR with a space, which
 # would split the path and copy or delete the wrong files.
 for target in install uninstall; do
-    set +e
-    make_dry_run "$target" PREFIX="$work_dir/a b" >/dev/null
-    status=$?
-    set -e
+    status=0
+    make_dry_run "$target" PREFIX="$work_dir/a b" >/dev/null || status=$?
     expect "make $target refuses a PREFIX with a space" status 2 "$status"
 done
 
@@ -451,14 +425,10 @@ installed_binary="$stage/root/usr/local/bin/rtx50-keepalive"
 make_in_stage() {
     env -u MAKEFLAGS make --no-print-directory -C "$stage" DESTDIR="$stage/root" PREFIX=/usr/local "$@" 2>&1
 }
-set +e
-output="$(make_in_stage install)"
-set -e
+output="$(make_in_stage install)" || true
 expect "make install gives the binary mode 755" mode 755 \
     "$(stat -c %a "$installed_binary" 2>/dev/null || echo "none, make printed: $output")"
-set +e
-output="$(make_in_stage uninstall)"
-set -e
+output="$(make_in_stage uninstall)" || true
 if [[ -e "$installed_binary" ]]; then
     fail "make uninstall removes the binary" "it is still there, make printed: $output"
 else
