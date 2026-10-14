@@ -99,8 +99,10 @@ To turn it off for a game, remove `rtx50-keepalive` from its launch options.
 ## Checking that it runs
 
 While the game runs, `pgrep -a rtx50-keepalive` lists it. It writes to stderr,
-which Steam passes on to its own output, so start Steam from a terminal to see
-its lines:
+which Steam passes on to its own output: the terminal, if you started Steam from
+one, or else wherever the desktop sends it. On a systemd desktop that is often
+the user journal, where `journalctl --user | grep rtx50-keepalive` finds it.
+Its lines look like this:
 
 ```
 rtx50-keepalive: NVIDIA GeForce RTX 5090, a 4-byte fill every 5 ms; reporting fences over 20 ms
