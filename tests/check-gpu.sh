@@ -67,7 +67,7 @@ sleep 2
 layers="$(grep -i -o '[^/ ]*\(overlay\|mangohud\|fossilize\|VkLayer\)[^/ ]*\.so' "/proc/$wrapper_pid/maps" | sort -u || true)"
 wait "$wrapper_pid"
 layers_stderr="$(cat "$work_dir/layers")"
-# A keepalive that failed to start has unloaded its layers, so an empty list proves nothing.
+# A keepalive that failed has unloaded its layers, so an empty list proves nothing.
 if [[ "$layers_stderr" != *"a 4-byte fill every 5 ms"* || "$layers_stderr" == *"the keepalive is off"* ]]; then
     fail "loads no Vulkan layer" "the keepalive did not run; stderr was [$layers_stderr]"
 elif [[ -z "$layers" ]]; then
