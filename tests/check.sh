@@ -462,8 +462,10 @@ expect "without a command and without a GPU it exits 1" status 1 "$status"
 # have it) gives a program run with an empty argv argc 0 and its environment
 # right after argv[0]; that environment is not a command.
 if build "$helper_compiler" -o "$work_dir/empty-argv" "$repo_dir/tests/empty-argv.c" -lvulkan; then
-    output="$("$work_dir/empty-argv" 2>/dev/null)" || true
-    expect "an empty argv runs no command" stdout "" "$output"
+    status=0
+    output="$("$work_dir/empty-argv" 2>/dev/null)" || status=$?
+    # Status 1 is the keepalive run alone, without a GPU; a crash prints nothing too.
+    expect "an empty argv runs no command" "stdout and status" "[] 1" "[$output] $status"
 else
     fail "an empty argv runs no command" "tests/empty-argv.c did not build"
 fi
