@@ -29,16 +29,23 @@ back to where it was.
 ## Results so far
 
 On one PC (RTX 5090, driver 595.99.02, GNOME on Wayland, ARC Raiders through
-Proton 11), logging GPU use every 200 ms (both sessions on 2026-10-13):
+Proton 11), logging GPU use every 200 ms:
 
-| | Session | Freezes |
-|---|---|---|
-| Without rtx50-keepalive | 3 h 38 min | 3 |
-| With rtx50-keepalive | 3 h 50 min | 0 |
+| | Play time | Freezes the player saw | Stalls in the GPU log |
+|---|---|---|---|
+| Without rtx50-keepalive | 3 h 38 min, one session (2026-10-13) | 3 | 3 |
+| With rtx50-keepalive | 7 h 20 min, two sessions (2026-10-13 and 14) | 0 | 3 |
 
-That is one session each. At the first session's rate, a freeze-free session of
-that length would happen by chance about 4% of the time, so more sessions and
-more machines are needed. Results are welcome in #880.
+The three stalls logged with the keepalive lasted about 4 s each, and each began
+within 45 s of the player switching back to the game from another window. The
+player noticed none of them. Whether they are this bug or the game catching up
+after the switch is not known yet. Both sessions with the keepalive ran the same
+job loop as this program, started beside the game by a logging script rather
+than as a launch option.
+
+At the rate seen without the keepalive, 7 h 20 min with no freeze seen would
+happen by chance about 0.2% of the time. This is still one machine and one game,
+so results from others are welcome in #880.
 
 ## Requirements
 
