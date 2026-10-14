@@ -51,10 +51,11 @@ failures=0
 pass() { echo "ok    $1"; }
 fail() { echo "FAIL  $1: $2"; failures=$((failures + 1)); }
 
+# Compiles with warnings as errors: the compiler, then the rest of its arguments.
 build() {
-    local compiler="$1" output="$2"
-    "$compiler" -std=c17 -O2 -Wall -Wextra -Wshadow -Wconversion -Werror \
-        -o "$output" "$repo_dir/rtx50-keepalive.c" -lvulkan
+    local compiler="$1"
+    shift
+    "$compiler" -std=c17 -O2 -Wall -Wextra -Wshadow -Wconversion -Werror "$@"
 }
 
 compilers_built=0
@@ -62,7 +63,7 @@ compilers_built=0
 helper_compiler=""
 for compiler in cc gcc clang; do
     if command -v "$compiler" >/dev/null; then
-        if build "$compiler" "$work_dir/rtx50-keepalive-$compiler"; then
+        if build "$compiler" -o "$work_dir/rtx50-keepalive-$compiler" "$repo_dir/rtx50-keepalive.c" -lvulkan; then
             pass "builds with $compiler and -Werror"
             compilers_built=$((compilers_built + 1))
             helper_compiler="${helper_compiler:-$compiler}"
@@ -154,8 +155,7 @@ expect_contains "the failed start is reported on stderr" "the keepalive is off" 
 # The keepalive's report shows it reached that create: under a hard open-file
 # limit too low for its fences it stops before any. VkResult -3 is the
 # stand-in's; the loader itself fails vkCreateInstance with -9 here.
-if "$helper_compiler" -std=c17 -O2 -Wall -Wextra -Wshadow -Wconversion -Werror -shared -fPIC \
-    -o "$work_dir/failed-create.so" "$repo_dir/tests/failed-create.c"; then
+if build "$helper_compiler" -shared -fPIC -o "$work_dir/failed-create.so" "$repo_dir/tests/failed-create.c"; then
     for create in vkCreateInstance vkCreateDevice vkCreateBuffer vkAllocateMemory vkCreateCommandPool \
         vkCreateFence; do
         set +e
@@ -192,8 +192,7 @@ expect "a command that is not executable exits 126" status 126 "$status"
 # reap a child at once. slow-fork.so holds the keepalive for 300 ms after its
 # fork, so the command exits before the signal handlers are in place.
 set +e
-"$helper_compiler" -std=c17 -O2 -Wall -Wextra -Wshadow -Wconversion -Werror -shared -fPIC \
-    -o "$work_dir/slow-fork.so" "$repo_dir/tests/slow-fork.c" -ldl &&
+build "$helper_compiler" -shared -fPIC -o "$work_dir/slow-fork.so" "$repo_dir/tests/slow-fork.c" -ldl &&
     env --ignore-signal=CHLD LD_PRELOAD="$work_dir/slow-fork.so" \
         "$keepalive" "$work_dir/no-such-command" >/dev/null 2>&1
 status=$?
@@ -297,8 +296,7 @@ expect_not_passed_on() {
 # A terminal emulator runs the keepalive as the leader of a new session; when
 # the window closes, the kernel sends SIGHUP to the leader alone.
 set +e
-"$helper_compiler" -std=c17 -O2 -Wall -Wextra -Wshadow -Wconversion -Werror \
-    -o "$work_dir/hangup" "$repo_dir/tests/hangup.c" &&
+build "$helper_compiler" -o "$work_dir/hangup" "$repo_dir/tests/hangup.c" &&
     "$work_dir/hangup" "$keepalive" sh -c 'trap "exit 9" HUP; while :; do sleep 0.05; done' >/dev/null 2>&1
 status=$?
 set -e
@@ -308,8 +306,7 @@ expect "a terminal's hangup is passed on to the command" status 9 "$status"
 # included, so passing it on would deliver it twice. kill-log.so logs each
 # kill() the keepalive makes.
 set +e
-"$helper_compiler" -std=c17 -O2 -Wall -Wextra -Wshadow -Wconversion -Werror -shared -fPIC \
-    -o "$work_dir/kill-log.so" "$repo_dir/tests/kill-log.c" -ldl &&
+build "$helper_compiler" -shared -fPIC -o "$work_dir/kill-log.so" "$repo_dir/tests/kill-log.c" -ldl &&
     "$work_dir/hangup" --interrupt \
         env LD_PRELOAD="$work_dir/kill-log.so" KILL_LOG="$work_dir/interrupt-kills.log" \
         "$keepalive" sh -c 'trap "exit 9" INT; while :; do sleep 0.05; done' >/dev/null 2>&1
@@ -351,8 +348,7 @@ fi
 # passed on after the command exited cannot reach a process that took the pid
 # over. unreaped-child.so exits 67 if the command was reaped before then.
 set +e
-"$helper_compiler" -std=c17 -O2 -Wall -Wextra -Wshadow -Wconversion -Werror -shared -fPIC \
-    -o "$work_dir/unreaped-child.so" "$repo_dir/tests/unreaped-child.c" &&
+build "$helper_compiler" -shared -fPIC -o "$work_dir/unreaped-child.so" "$repo_dir/tests/unreaped-child.c" &&
     env LD_PRELOAD="$work_dir/unreaped-child.so" "$keepalive" sh -c 'exit 5' >/dev/null 2>&1
 status=$?
 set -e
@@ -364,8 +360,7 @@ expect "without a command and without a GPU it exits 1" status 1 "$status"
 # A kernel without the exec change of Linux 5.18 (some older stable kernels
 # have it) gives a program run with an empty argv argc 0 and its environment
 # right after argv[0]; that environment is not a command.
-if "$helper_compiler" -std=c17 -O2 -Wall -Wextra -Wshadow -Wconversion -Werror \
-    -o "$work_dir/empty-argv" "$repo_dir/tests/empty-argv.c" -lvulkan; then
+if build "$helper_compiler" -o "$work_dir/empty-argv" "$repo_dir/tests/empty-argv.c" -lvulkan; then
     set +e
     output="$("$work_dir/empty-argv" 2>/dev/null)"
     set -e
