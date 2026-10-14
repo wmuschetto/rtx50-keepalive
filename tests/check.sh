@@ -7,7 +7,8 @@
 # does not exist, so the keepalive fails to start, which is the path that must
 # still run the command. One check names a FIFO as the driver file instead, to
 # hold the keepalive in vkCreateInstance. The helpers in tests/ (failed-create,
-# hangup, kill-log, slow-fork) are built with the first compiler that built it.
+# hangup, kill-log, slow-fork, unreaped-child) are built with the first
+# compiler that built it.
 # Exits 1 if any check fails.
 set -euo pipefail
 
@@ -290,6 +291,17 @@ status=$?
 set -e
 expect_not_passed_on "a hangup's SIGHUP is not passed on when a shell leads the session" 129 \
     "$work_dir/shell-hangup-kills.log"
+
+# The command's pid stays taken until the keepalive exits, so a stop signal
+# passed on after the command exited cannot reach a process that took the pid
+# over. unreaped-child.so exits 67 if the command was reaped before then.
+set +e
+"$helper_compiler" -std=c17 -O2 -Wall -Wextra -Wshadow -Wconversion -Werror -shared -fPIC \
+    -o "$work_dir/unreaped-child.so" "$repo_dir/tests/unreaped-child.c" &&
+    env LD_PRELOAD="$work_dir/unreaped-child.so" "$keepalive" sh -c 'exit 5' >/dev/null 2>&1
+status=$?
+set -e
+expect "the command is not reaped before the keepalive exits" status 5 "$status"
 
 run
 expect "without a command and without a GPU it exits 1" status 1 "$status"

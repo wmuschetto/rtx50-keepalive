@@ -118,8 +118,9 @@ static volatile sig_atomic_t command_pid = 0;
 /* Set with command_pid: whether this process leads its session. */
 static volatile sig_atomic_t leads_session = 0;
 static volatile sig_atomic_t stop_requested = 0;
-static int command_status;
-/* Set when waitpid fails and the command's status cannot be known. */
+/* The command's exit as waitid reports it; si_pid is 0 until it has exited. */
+static siginfo_t command_exit;
+/* Set when waitid fails and the command's status cannot be known. */
 static int command_status_lost;
 
 static void on_stop_signal(int signal_number, siginfo_t *info, void *context) {
@@ -563,19 +564,18 @@ static void keepalive_report(Keepalive *k) {
             (unsigned long long)k->totals.holds, (double)k->totals.longest_ns / NANOSECONDS_PER_MILLISECOND);
 }
 
-/* Reaps the command when it has exited: 1 once it has (its status in
- * command_status), 0 while it runs. Blocks until then when wait is set. */
+/* 1 once the command has exited (its exit in command_exit), 0 while it runs.
+ * Blocks until then when wait is set. The command is left unreaped (WNOWAIT):
+ * its pid stays taken until this process exits, so a stop signal passed on
+ * late never reaches a process that took the pid over. */
 static int command_exited(int wait) {
     for (;;) {
-        pid_t result = waitpid((pid_t)command_pid, &command_status, wait ? 0 : WNOHANG);
-        if (result == (pid_t)command_pid) {
-            return 1;
-        }
-        if (result == 0) {
-            return 0;
+        command_exit.si_pid = 0;
+        if (waitid(P_PID, (id_t)command_pid, &command_exit, WEXITED | WNOWAIT | (wait ? 0 : WNOHANG)) == 0) {
+            return command_exit.si_pid != 0;
         }
         if (errno != EINTR) {
-            fprintf(stderr, PROGRAM ": waitpid failed (%s); the command's exit status is lost\n",
+            fprintf(stderr, PROGRAM ": waitid failed (%s); the command's exit status is lost\n",
                     strerror(errno));
             command_status_lost = 1;
             return 1;
@@ -596,11 +596,11 @@ static int exit_status_of_command(void) {
     if (command_status_lost) {
         return EXIT_FAILURE;
     }
-    if (WIFEXITED(command_status)) {
-        return WEXITSTATUS(command_status);
+    if (command_exit.si_code == CLD_EXITED) {
+        return command_exit.si_status;
     }
-    if (WIFSIGNALED(command_status)) {
-        return EXIT_SIGNALED_BASE + WTERMSIG(command_status);
+    if (command_exit.si_code == CLD_KILLED || command_exit.si_code == CLD_DUMPED) {
+        return EXIT_SIGNALED_BASE + command_exit.si_status;
     }
     return EXIT_FAILURE;
 }
