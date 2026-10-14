@@ -119,6 +119,7 @@ for option in --help -h; do
 done
 
 run --version
+expect "--version exits 0" status 0 "$status"
 expect_contains "--version prints the version" "rtx50-keepalive " "$stdout"
 
 run --bogus
