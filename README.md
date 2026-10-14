@@ -116,7 +116,10 @@ power. It starts in about a second, alongside the game, and exits within about
 - NVIDIA's driver opens a file for each fence, about 2,100 in all. It raises its
   own open-file soft limit for them, and leaves the game's alone.
 - It turns off Vulkan layers for its own device (Steam's overlay, MangoHud), so
-  its jobs go straight to the driver.
+  its jobs go straight to the driver. This needs Vulkan loader 1.3.234 or later
+  (Ubuntu 22.04 ships 1.3.204, which keeps the layers on), and a layer that
+  `VK_INSTANCE_LAYERS`, `VK_LOADER_LAYERS_ENABLE` or `VK_LOADER_LAYERS_ALLOW`
+  asks for stays on.
 - It passes SIGTERM, SIGINT, SIGHUP and SIGQUIT sent to it on to the game, and
   exits with the game's exit status.
 

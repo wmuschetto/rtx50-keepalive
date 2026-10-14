@@ -416,7 +416,9 @@ static int record_jobs(Keepalive *k, uint32_t queue_family) {
 
 static int keepalive_start(Keepalive *k) {
     /* Implicit layers (Steam's overlay, MangoHud and the like) follow the
-     * environment a launcher sets for the game; this device needs none. */
+     * environment a launcher sets for the game; this device needs none.
+     * Loaders before 1.3.234 ignore the variable, and VK_INSTANCE_LAYERS,
+     * VK_LOADER_LAYERS_ENABLE and VK_LOADER_LAYERS_ALLOW override it. */
     if (setenv("VK_LOADER_LAYERS_DISABLE", "~all~", 1) != 0) {
         fprintf(stderr, PROGRAM ": setenv failed (%s); the keepalive is off\n", strerror(errno));
         return -1;
