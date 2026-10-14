@@ -3,22 +3,21 @@
 #
 # Builds rtx50-keepalive with warnings as errors (with every compiler found
 # among cc, gcc and clang) and tests how it runs a command and handles
-# signals, what make install and uninstall do (in a folder under its work
-# directory), and the CI workflow's token, pins and credentials. Needs no
-# GPU: the Vulkan loader is pointed at a driver file that does not exist and
-# kept from the drivers a loader settings file adds, so the keepalive fails
-# to start, which is the path that must still run the command. One check
-# names a FIFO as the driver file instead, to hold the keepalive in
+# signals, what make, make install and make uninstall do (in a folder under
+# its work directory), and the CI workflow's token, pins and credentials.
+# Needs no GPU: the Vulkan loader is pointed at a driver file that does not
+# exist and kept from the drivers a loader settings file adds, so the
+# keepalive fails to start, which is the path that must still run the command.
+# One check names a FIFO as the driver file instead, to hold the keepalive in
 # vkCreateInstance, and others preload a stand-in for the loader: one with one
 # NVIDIA GPU, to fail each create in turn and then the first submit, and one
 # with the devices a check lists, to see which GPU it opens. One check feeds
 # the hold report fixed job times, another checks a hold's time against the
 # clock, and one runs the job loop through a hold against stand-ins for the
-# Vulkan calls and the clock.
-# The helpers in tests/ (device-list, empty-argv, failed-create, failed-fork,
-# hangup, hold-report, hold-start, keepalive-loop, kill-log, slow-fork,
-# unreaped-child) are built with the first compiler that built it, and the
-# checks run that compiler's build.
+# Vulkan calls and the clock. The helpers in tests/ (device-list, empty-argv,
+# failed-create, failed-fork, hangup, hold-report, hold-start, keepalive-loop,
+# kill-log, slow-fork, unreaped-child) are built with the first compiler that
+# built it, and the checks run that compiler's build.
 # Exits 1 if any check fails.
 set -euo pipefail
 
@@ -542,18 +541,22 @@ for target in install uninstall; do
     expect "make $target refuses a PREFIX with a space" status 2 "$status"
 done
 
-# make install gives the binary mode 755, so under sudo only root can change
-# it, and make uninstall removes it. They run on a copy of the Makefile beside
-# a binary newer than the source, so nothing is built. PREFIX is given since
-# one in the environment would move the binary.
+# make builds it, on a copy of the Makefile and the source. make install gives
+# the binary mode 755, so under sudo only root can change it, and make
+# uninstall removes it. PREFIX is given since one in the environment would
+# move the binary.
 stage="$work_dir/stage"
 mkdir "$stage"
 cp "$repo_dir/Makefile" "$repo_dir/rtx50-keepalive.c" "$stage/"
-cp "$keepalive" "$stage/rtx50-keepalive"
 installed_binary="$stage/root/usr/local/bin/rtx50-keepalive"
 make_in_stage() {
     env -u MAKEFLAGS make --no-print-directory -C "$stage" DESTDIR="$stage/root" PREFIX=/usr/local "$@" 2>&1
 }
+if output="$(make_in_stage CC="$helper_compiler" CFLAGS="-O2 -Werror")"; then
+    pass "make builds it with -Werror"
+else
+    fail "make builds it with -Werror" "make printed: $output"
+fi
 output="$(make_in_stage install)" || true
 expect "make install gives the binary mode 755" mode 755 \
     "$(stat -c %a "$installed_binary" 2>/dev/null || echo "none, make printed: $output")"
