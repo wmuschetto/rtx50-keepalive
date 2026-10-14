@@ -6,9 +6,9 @@
 # signals. Needs no GPU: the Vulkan loader is pointed at a driver file that
 # does not exist, so the keepalive fails to start, which is the path that must
 # still run the command. One check names a FIFO as the driver file instead, to
-# hold the keepalive in vkCreateInstance. The helpers in tests/ (failed-create,
-# hangup, kill-log, slow-fork, unreaped-child) are built with the first
-# compiler that built it.
+# hold the keepalive in vkCreateInstance. The helpers in tests/ (empty-argv,
+# failed-create, hangup, kill-log, slow-fork, unreaped-child) are built with
+# the first compiler that built it.
 # Exits 1 if any check fails.
 set -euo pipefail
 
@@ -305,6 +305,18 @@ expect "the command is not reaped before the keepalive exits" status 5 "$status"
 
 run
 expect "without a command and without a GPU it exits 1" status 1 "$status"
+
+# A kernel before 5.18 gives a program run with an empty argv argc 0 and its
+# environment right after argv[0]; that environment is not a command.
+if "$helper_compiler" -std=c17 -O2 -Wall -Wextra -Wshadow -Wconversion -Werror \
+    -o "$work_dir/empty-argv" "$repo_dir/tests/empty-argv.c" -lvulkan; then
+    set +e
+    output="$("$work_dir/empty-argv" 2>/dev/null)"
+    set -e
+    expect "an empty argv runs no command" stdout "" "$output"
+else
+    fail "an empty argv runs no command" "tests/empty-argv.c did not build"
+fi
 
 # Without a command, a stop signal ignored on entry stays ignored, as nohup and
 # a shell's background jobs rely on. A FIFO as the driver file holds the
