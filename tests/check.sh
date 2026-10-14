@@ -192,9 +192,11 @@ if build "$helper_compiler" -shared -fPIC -o "$work_dir/failed-create.so" "$repo
         if [[ "$create_stderr" != *"$create failed (VkResult -3)"* ]]; then
             fail "after a failed $create, what was created is destroyed and the failed output is not used" \
                 "the keepalive did not reach $create; stderr was [$create_stderr]"
+        elif [[ "$status" != 5 ]]; then
+            fail "after a failed $create, what was created is destroyed and the failed output is not used" \
+                "status was [$status], expected [5]; stderr was [$create_stderr]"
         else
-            expect "after a failed $create, what was created is destroyed and the failed output is not used" \
-                status 5 "$status"
+            pass "after a failed $create, what was created is destroyed and the failed output is not used"
         fi
     done
     # A keepalive that fails mid-run, as on a lost GPU, frees its device and
@@ -209,9 +211,11 @@ if build "$helper_compiler" -shared -fPIC -o "$work_dir/failed-create.so" "$repo
     if [[ "$submit_stderr" != *"vkQueueSubmit failed (VkResult -4)"* ]]; then
         fail "a keepalive that fails mid-run destroys what it created, and the command runs on" \
             "the keepalive did not reach vkQueueSubmit; stderr was [$submit_stderr]"
+    elif [[ "$status" != 5 ]]; then
+        fail "a keepalive that fails mid-run destroys what it created, and the command runs on" \
+            "status was [$status], expected [5]; stderr was [$submit_stderr]"
     else
-        expect "a keepalive that fails mid-run destroys what it created, and the command runs on" status 5 \
-            "$status"
+        pass "a keepalive that fails mid-run destroys what it created, and the command runs on"
     fi
 else
     fail "after a failed create, what was created is destroyed and the failed output is not used" \
