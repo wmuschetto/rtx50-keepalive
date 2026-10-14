@@ -400,16 +400,12 @@ else
         "SigIgn was $ignored_mask, without SIGHUP's bit"
 fi
 
-# Prints what make would run for the given arguments, with DESTDIR empty.
-make_dry_run() {
-    env -u MAKEFLAGS make -n --no-print-directory -C "$repo_dir" DESTDIR= "$@" 2>&1
-}
-
 # make install and uninstall refuse a PREFIX or DESTDIR with a space, which
 # would split the path and copy or delete the wrong files.
 for target in install uninstall; do
     status=0
-    make_dry_run "$target" PREFIX="$work_dir/a b" >/dev/null || status=$?
+    env -u MAKEFLAGS make -n --no-print-directory -C "$repo_dir" DESTDIR= "$target" PREFIX="$work_dir/a b" \
+        >/dev/null 2>&1 || status=$?
     expect "make $target refuses a PREFIX with a space" status 2 "$status"
 done
 
