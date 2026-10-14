@@ -207,6 +207,7 @@ if build "$helper_compiler" -shared -fPIC -o "$work_dir/failed-create.so" "$repo
     # first submit with VK_ERROR_DEVICE_LOST; the command runs until the
     # keepalive reports that, or 5 s.
     status=0
+    # shellcheck disable=SC2016,SC2094 # the inner sh expands $1, and polls the stderr file the keepalive writes
     env FAILED_CREATE=vkQueueSubmit LD_PRELOAD="$work_dir/failed-create.so" "$keepalive" \
         sh -c 'for _ in $(seq 500); do grep -q "vkQueueSubmit failed" "$1" && exit 5; sleep 0.01; done' \
         sh "$work_dir/stderr" >/dev/null 2>"$work_dir/stderr" || status=$?
