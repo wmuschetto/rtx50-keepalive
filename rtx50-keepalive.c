@@ -668,11 +668,11 @@ static int run_alone(void) {
 }
 
 int main(int argc, char **argv) {
-    if (argc == 2 && (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0)) {
+    if (argc > 1 && (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0)) {
         print_usage(stdout);
         return EXIT_SUCCESS;
     }
-    if (argc == 2 && strcmp(argv[1], "--version") == 0) {
+    if (argc > 1 && strcmp(argv[1], "--version") == 0) {
         printf(PROGRAM " " VERSION "\n");
         return EXIT_SUCCESS;
     }

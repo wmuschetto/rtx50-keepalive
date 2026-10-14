@@ -124,6 +124,13 @@ run --version
 expect "--version exits 0" status 0 "$status"
 expect_contains "--version prints the version" "rtx50-keepalive " "$stdout"
 
+# As in GNU tools, what follows --help or --version is ignored.
+run --help extra
+expect "--help with an argument exits 0" status 0 "$status"
+expect_contains "--help with an argument prints the usage" "Usage: rtx50-keepalive COMMAND" "$stdout"
+run --version extra
+expect "--version with an argument exits 0" status 0 "$status"
+
 run --bogus
 expect "an unknown option exits 2" status 2 "$status"
 
