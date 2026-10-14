@@ -15,13 +15,14 @@ set -euo pipefail
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 work_dir="$(mktemp -d)"
-# The keepalive a test runs in the background, while it runs. Background jobs
-# ignore Ctrl-C, so an interrupted run kills it and its command on the way out.
+# The keepalive a test runs in the background, while it runs. One with a
+# command runs under setsid, so it leads a process group that holds its command
+# too, even after a keepalive that died first. Background jobs ignore Ctrl-C,
+# so an interrupted run kills that group on the way out.
 wrapper_pid=""
 clean_up() {
     if [[ -n "$wrapper_pid" ]]; then
-        pkill -KILL -P "$wrapper_pid" || true
-        kill -KILL "$wrapper_pid" 2>/dev/null || true
+        kill -KILL -- "-$wrapper_pid" 2>/dev/null || kill -KILL "$wrapper_pid" 2>/dev/null || true
     fi
     rm -rf "$work_dir"
 }
@@ -168,19 +169,21 @@ set -e
 expect "a quick command's exit status survives an inherited ignored SIGCHLD" status 127 "$status"
 
 # Sends SIGTERM to the keepalive running in the background as wrapper_pid and
-# expects it to exit within 5 s with the given status; sets status.
+# expects it to exit within 5 s with the given status; sets status. Then it
+# kills the keepalive's process group, which ends a command left running.
 expect_sigterm_passed_on() {
     local name="$1" wanted="$2" timed_out=0
-    kill -TERM "$wrapper_pid"
+    # A keepalive that exited before its command fails the check below
+    # instead of stopping the script.
+    kill -TERM "$wrapper_pid" 2>/dev/null || true
     for _ in $(seq 50); do
         kill -0 "$wrapper_pid" 2>/dev/null || break
         sleep 0.1
     done
     if kill -0 "$wrapper_pid" 2>/dev/null; then
         timed_out=1
-        pkill -KILL -P "$wrapper_pid" || true
-        kill -KILL "$wrapper_pid"
     fi
+    kill -KILL -- "-$wrapper_pid" 2>/dev/null || true
     set +e
     wait "$wrapper_pid"
     status=$?
@@ -194,7 +197,7 @@ expect_sigterm_passed_on() {
 }
 
 # A SIGTERM sent to the keepalive's process is passed on to the command.
-"$keepalive" sh -c 'trap "exit 7" TERM; while :; do sleep 0.05; done' >/dev/null 2>&1 &
+setsid "$keepalive" sh -c 'trap "exit 7" TERM; while :; do sleep 0.05; done' >/dev/null 2>&1 &
 wrapper_pid=$!
 sleep 0.5
 expect_sigterm_passed_on "SIGTERM is passed on to the command" 7
@@ -203,7 +206,7 @@ expect_sigterm_passed_on "SIGTERM is passed on to the command" 7
 # then passed on: slow-fork.so holds the keepalive for 300 ms after its fork.
 # The command writes its pid to descriptor 3 once it runs.
 held_pid_file="$work_dir/held-signal-command.pid"
-env LD_PRELOAD="$work_dir/slow-fork.so" "$keepalive" \
+setsid env LD_PRELOAD="$work_dir/slow-fork.so" "$keepalive" \
     sh -c 'trap "exit 7" TERM; echo $$ >&3; while :; do sleep 0.05; done' \
     >/dev/null 2>&1 3>"$held_pid_file" &
 wrapper_pid=$!
@@ -215,10 +218,6 @@ for _ in $(seq 100); do
     sleep 0.01
 done
 expect_sigterm_passed_on "a SIGTERM sent before the handlers are in place is passed on" 7
-# A keepalive that died of the signal left its command running.
-if [[ "$status" == 143 ]]; then
-    kill -KILL "$(cat "$held_pid_file")" 2>/dev/null || true
-fi
 
 # The command gets the launcher's signal handling: an ignored SIGCHLD is
 # restored after the fork, and the stop signals and the mask are left alone.
@@ -238,7 +237,7 @@ fi
 # With a command, a stop signal ignored on entry is still caught and passed on,
 # since a game sets its own handlers. A shell cannot trap a signal ignored on
 # entry, so env gives the command's shell the default back.
-env --ignore-signal=TERM "$keepalive" \
+setsid env --ignore-signal=TERM "$keepalive" \
     env --default-signal=TERM sh -c 'trap "exit 7" TERM; while :; do sleep 0.05; done' >/dev/null 2>&1 &
 wrapper_pid=$!
 sleep 0.5
