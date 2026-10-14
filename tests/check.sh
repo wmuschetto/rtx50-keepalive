@@ -360,8 +360,9 @@ expect "the command is not reaped before the keepalive exits" status 5 "$status"
 run
 expect "without a command and without a GPU it exits 1" status 1 "$status"
 
-# A kernel before 5.18 gives a program run with an empty argv argc 0 and its
-# environment right after argv[0]; that environment is not a command.
+# A kernel without the exec change of Linux 5.18 (some older stable kernels
+# have it) gives a program run with an empty argv argc 0 and its environment
+# right after argv[0]; that environment is not a command.
 if "$helper_compiler" -std=c17 -O2 -Wall -Wextra -Wshadow -Wconversion -Werror \
     -o "$work_dir/empty-argv" "$repo_dir/tests/empty-argv.c" -lvulkan; then
     set +e

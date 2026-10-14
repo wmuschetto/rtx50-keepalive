@@ -679,8 +679,9 @@ int main(int argc, char **argv) {
         printf(PROGRAM " " VERSION "\n");
         return EXIT_SUCCESS;
     }
-    /* A kernel before 5.18 starts a program run with an empty argv with argc 0
-     * and its environment right after argv[0]; later kernels give argc 1. */
+    /* A kernel without the exec change of Linux 5.18 (some older stable kernels
+     * have it) starts a program run with an empty argv with argc 0 and its
+     * environment right after argv[0]; the others give argc 1. */
     char **command = argc > 0 ? argv + 1 : argv;
     if (argc > 1 && strcmp(argv[1], "--") == 0) {
         command++;
