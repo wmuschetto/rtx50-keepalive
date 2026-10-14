@@ -7,7 +7,7 @@
 # does not exist, so the keepalive fails to start, which is the path that must
 # still run the command. One check names a FIFO as the driver file instead, to
 # hold the keepalive in vkCreateInstance. The helpers in tests/ (failed-create,
-# hangup, slow-fork) are built with the first compiler that built it.
+# hangup, kill-log, slow-fork) are built with the first compiler that built it.
 # Exits 1 if any check fails.
 set -euo pipefail
 
@@ -165,28 +165,59 @@ status=$?
 set -e
 expect "a quick command's exit status survives an inherited ignored SIGCHLD" status 127 "$status"
 
-# A SIGTERM sent to the keepalive's process is passed on to the command.
-"$keepalive" sh -c 'trap "exit 7" TERM; while :; do sleep 0.05; done' >/dev/null 2>&1 &
-wrapper_pid=$!
-sleep 0.5
-kill -TERM "$wrapper_pid"
-for _ in $(seq 50); do
-    kill -0 "$wrapper_pid" 2>/dev/null || break
-    sleep 0.1
-done
-if kill -0 "$wrapper_pid" 2>/dev/null; then
-    pkill -KILL -P "$wrapper_pid" || true
-    kill -KILL "$wrapper_pid"
-    wait "$wrapper_pid" || true
-    fail "SIGTERM is passed on to the command" "the command was still running 5 s later"
-else
+# Sends SIGTERM to the keepalive running in the background as wrapper_pid and
+# expects it to exit within 5 s with the given status; sets status.
+expect_sigterm_passed_on() {
+    local name="$1" wanted="$2" timed_out=0
+    kill -TERM "$wrapper_pid"
+    for _ in $(seq 50); do
+        kill -0 "$wrapper_pid" 2>/dev/null || break
+        sleep 0.1
+    done
+    if kill -0 "$wrapper_pid" 2>/dev/null; then
+        timed_out=1
+        pkill -KILL -P "$wrapper_pid" || true
+        kill -KILL "$wrapper_pid"
+    fi
     set +e
     wait "$wrapper_pid"
     status=$?
     set -e
-    expect "SIGTERM is passed on to the command" status 7 "$status"
-fi
-wrapper_pid=""
+    wrapper_pid=""
+    if [[ "$timed_out" -eq 1 ]]; then
+        fail "$name" "the command was still running 5 s later"
+    else
+        expect "$name" status "$wanted" "$status"
+    fi
+}
+
+# A SIGTERM sent to the keepalive's process is passed on to the command.
+"$keepalive" sh -c 'trap "exit 7" TERM; while :; do sleep 0.05; done' >/dev/null 2>&1 &
+wrapper_pid=$!
+sleep 0.5
+expect_sigterm_passed_on "SIGTERM is passed on to the command" 7
+
+# With a command, a stop signal ignored on entry is still caught and passed on,
+# since a game sets its own handlers. A shell cannot trap a signal ignored on
+# entry, so env gives the command's shell the default back.
+env --ignore-signal=TERM "$keepalive" \
+    env --default-signal=TERM sh -c 'trap "exit 7" TERM; while :; do sleep 0.05; done' >/dev/null 2>&1 &
+wrapper_pid=$!
+sleep 0.5
+expect_sigterm_passed_on "with a command, a SIGTERM ignored on entry is passed on" 7
+
+# Expects the hangup helper's run to have exited with the given status and the
+# keepalive to have passed on no signal, by the log kill-log.so wrote.
+expect_not_passed_on() {
+    local name="$1" wanted="$2" kill_log="$3"
+    if [[ "$status" != "$wanted" ]]; then
+        fail "$name" "status was [$status], expected [$wanted]"
+    elif [[ ! -f "$kill_log" ]]; then
+        fail "$name" "kill-log.so wrote no log"
+    else
+        expect "$name" "the kill() calls" "" "$(cat "$kill_log")"
+    fi
+}
 
 # A terminal emulator runs the keepalive as the leader of a new session; when
 # the window closes, the kernel sends SIGHUP to the leader alone.
@@ -197,6 +228,32 @@ set +e
 status=$?
 set -e
 expect "a terminal's hangup is passed on to the command" status 9 "$status"
+
+# The terminal's Ctrl-C goes to its whole foreground process group, the command
+# included, so passing it on would deliver it twice. kill-log.so logs each
+# kill() the keepalive makes.
+set +e
+"$helper_compiler" -std=c17 -O2 -Wall -Wextra -Wshadow -Wconversion -Werror -shared -fPIC \
+    -o "$work_dir/kill-log.so" "$repo_dir/tests/kill-log.c" -ldl &&
+    "$work_dir/hangup" --interrupt \
+        env LD_PRELOAD="$work_dir/kill-log.so" KILL_LOG="$work_dir/interrupt-kills.log" \
+        "$keepalive" sh -c 'trap "exit 9" INT; while :; do sleep 0.05; done' >/dev/null 2>&1
+status=$?
+set -e
+expect_not_passed_on "Ctrl-C is not passed on to the command" 9 "$work_dir/interrupt-kills.log"
+
+# When a shell leads the session, the hangup's SIGHUP ends the shell, and the
+# kernel then sends SIGHUP to the shell's whole process group, the keepalive
+# and its command included. hangup exits with the shell's 128+1 once they have
+# all exited.
+set +e
+"$work_dir/hangup" sh -c '"$@"; exit' sh \
+    env LD_PRELOAD="$work_dir/kill-log.so" KILL_LOG="$work_dir/shell-hangup-kills.log" \
+    "$keepalive" sh -c 'trap "exit 9" HUP; while :; do sleep 0.05; done' >/dev/null 2>&1
+status=$?
+set -e
+expect_not_passed_on "a hangup's SIGHUP is not passed on when a shell leads the session" 129 \
+    "$work_dir/shell-hangup-kills.log"
 
 run
 expect "without a command and without a GPU it exits 1" status 1 "$status"

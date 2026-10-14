@@ -1,27 +1,33 @@
 /*
- * Usage: hangup COMMAND [ARGUMENT...]
+ * Usage: hangup [--interrupt] COMMAND [ARGUMENT...]
  *
  * Runs COMMAND as the leader of a new session with a new pseudo-terminal as its
- * controlling terminal, hangs the terminal up HANGUP_AFTER_MS later, as closing
- * a terminal window does, and exits with COMMAND's exit status, or 124 if
- * COMMAND still runs GIVE_UP_AFTER_MS after the hangup. tests/check.sh builds
- * and runs it.
+ * controlling terminal. SIGNAL_AFTER_MS later it hangs the terminal up, as
+ * closing a terminal window does, or with --interrupt types Ctrl-C on it. It
+ * exits with COMMAND's exit status once COMMAND and every process COMMAND left
+ * behind have exited, or 124 if any still runs GIVE_UP_AFTER_MS after the
+ * hangup or Ctrl-C. tests/check.sh builds and runs it.
  */
 #define _XOPEN_SOURCE 700
 
+#include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <sys/prctl.h>
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
 
 /* Gives COMMAND time to set up its signal handlers, as tests/check.sh's other
  * signal test does. */
-#define HANGUP_AFTER_MS 500
+#define SIGNAL_AFTER_MS 500
 #define GIVE_UP_AFTER_MS 5000
 #define POLL_MS 50
+/* The interrupt character of a new terminal (VINTR). */
+#define CONTROL_C '\003'
 #define EXIT_USAGE 2
 #define EXIT_TIMED_OUT 124
 #define EXIT_SIGNALED_BASE 128
@@ -32,8 +38,17 @@ static void sleep_ms(long milliseconds) {
 }
 
 int main(int argc, char **argv) {
-    if (argc < 2) {
-        fprintf(stderr, "Usage: hangup COMMAND [ARGUMENT...]\n");
+    int interrupt = argc > 1 && strcmp(argv[1], "--interrupt") == 0;
+    if (argc < 2 + interrupt) {
+        fprintf(stderr, "Usage: hangup [--interrupt] COMMAND [ARGUMENT...]\n");
+        return EXIT_USAGE;
+    }
+    char **command = argv + 1 + interrupt;
+    /* A process whose parent exits is handed to this one, so it can wait for
+     * what COMMAND left behind: a shell that leads the session dies of the
+     * hangup before the processes it started. */
+    if (prctl(PR_SET_CHILD_SUBREAPER, 1) != 0) {
+        perror("hangup: cannot wait for the processes COMMAND leaves behind");
         return EXIT_USAGE;
     }
     int terminal = posix_openpt(O_RDWR | O_NOCTTY);
@@ -55,23 +70,40 @@ int main(int argc, char **argv) {
             perror("hangup: cannot give the command a controlling terminal");
             _exit(EXIT_USAGE);
         }
-        execvp(argv[1], argv + 1);
+        execvp(command[0], command);
         perror("hangup: cannot run the command");
         _exit(127);
     }
-    sleep_ms(HANGUP_AFTER_MS);
-    /* Closing the master side hangs the terminal up: the kernel sends SIGHUP
-     * to the session leader alone. */
-    close(terminal);
+    sleep_ms(SIGNAL_AFTER_MS);
+    if (interrupt) {
+        /* The terminal sends SIGINT to its whole foreground process group. */
+        const char control_c = CONTROL_C;
+        if (write(terminal, &control_c, 1) != 1) {
+            perror("hangup: cannot type Ctrl-C");
+        }
+    } else {
+        /* Closing the master side hangs the terminal up: the kernel sends
+         * SIGHUP to the session leader alone. */
+        close(terminal);
+    }
+    int command_status = 0;
     for (int waited_ms = 0; waited_ms < GIVE_UP_AFTER_MS; waited_ms += POLL_MS) {
         int status;
-        if (waitpid(pid, &status, WNOHANG) == pid) {
-            return WIFEXITED(status) ? WEXITSTATUS(status) : EXIT_SIGNALED_BASE + WTERMSIG(status);
+        pid_t exited;
+        while ((exited = waitpid(-1, &status, WNOHANG)) > 0) {
+            if (exited == pid) {
+                command_status = status;
+            }
+        }
+        if (exited < 0 && errno == ECHILD) {
+            return WIFEXITED(command_status) ? WEXITSTATUS(command_status)
+                                             : EXIT_SIGNALED_BASE + WTERMSIG(command_status);
         }
         sleep_ms(POLL_MS);
     }
-    /* The session's process group: COMMAND and the children it left in it. */
+    /* The session's process group: COMMAND and the processes it left in it. */
     kill(-pid, SIGKILL);
-    waitpid(pid, NULL, 0);
+    while (waitpid(-1, NULL, 0) > 0) {
+    }
     return EXIT_TIMED_OUT;
 }
