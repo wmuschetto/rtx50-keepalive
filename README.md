@@ -82,7 +82,9 @@ Lutris: in the game's configuration, set System options > Command prefix (an
 advanced option) to `rtx50-keepalive`. Other launchers that accept a wrapper
 command or command prefix work the same way.
 
-From a terminal: `rtx50-keepalive ./game --its-options`.
+From a terminal: `rtx50-keepalive ./game --its-options`. Without a command,
+`rtx50-keepalive` runs on its own until Ctrl-C, for a game started some other
+way.
 
 To turn it off for a game, remove `rtx50-keepalive` from its launch options.
 
@@ -141,7 +143,8 @@ judgment.
 - It uses the first discrete NVIDIA GPU. On a machine with two, that may not be
   the one the game runs on.
 - If a game's launcher starts the game and then exits, the keepalive stops with
-  the launcher.
+  the launcher. For such a game, run `rtx50-keepalive` with no command in a
+  terminal and press Ctrl-C after the game exits.
 
 ## Development
 
