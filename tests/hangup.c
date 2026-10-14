@@ -21,8 +21,7 @@
 #include <time.h>
 #include <unistd.h>
 
-/* Gives COMMAND time to set up its signal handlers, as tests/check.sh's other
- * signal test does. */
+/* Gives COMMAND time to set up its signal handlers. */
 #define SIGNAL_AFTER_MS 500
 #define GIVE_UP_AFTER_MS 5000
 #define POLL_MS 50
