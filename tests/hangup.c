@@ -6,9 +6,9 @@
  * or every process has closed that descriptor, or GIVE_UP_AFTER_MS later, it
  * hangs the terminal up, as closing a terminal window does, or with
  * --interrupt types Ctrl-C on it. It exits with COMMAND's exit status once
- * COMMAND and every process COMMAND left behind have exited, or 124 if any
- * still runs GIVE_UP_AFTER_MS after the hangup or Ctrl-C. tests/check.sh
- * builds and runs it.
+ * COMMAND and every process COMMAND left behind have exited, or kills them
+ * and exits 124 if any still runs GIVE_UP_AFTER_MS after the hangup or
+ * Ctrl-C. tests/check.sh builds and runs it.
  */
 #define _XOPEN_SOURCE 700
 
@@ -40,6 +40,31 @@
 static void sleep_ms(long milliseconds) {
     struct timespec delay = {.tv_sec = milliseconds / 1000, .tv_nsec = milliseconds % 1000 * 1000000L};
     nanosleep(&delay, NULL);
+}
+
+/* Kills every child until none is left: as a subreaper this process inherits
+ * the children of each one killed, whatever process group or session they
+ * moved to. The children file needs CONFIG_PROC_CHILDREN. */
+static void kill_every_child(void) {
+    for (;;) {
+        FILE *children = fopen("/proc/thread-self/children", "r");
+        if (children == NULL) {
+            perror("hangup: cannot list the processes left");
+            return;
+        }
+        long child;
+        while (fscanf(children, "%ld", &child) == 1) {
+            kill((pid_t)child, SIGKILL);
+        }
+        fclose(children);
+        pid_t reaped;
+        while ((reaped = waitpid(-1, NULL, WNOHANG)) > 0) {
+        }
+        if (reaped < 0) {
+            return;
+        }
+        sleep_ms(POLL_MS);
+    }
 }
 
 int main(int argc, char **argv) {
@@ -126,7 +151,6 @@ int main(int argc, char **argv) {
     }
     /* The session's process group: COMMAND and the processes it left in it. */
     kill(-pid, SIGKILL);
-    while (waitpid(-1, NULL, 0) > 0) {
-    }
+    kill_every_child();
     return EXIT_TIMED_OUT;
 }
