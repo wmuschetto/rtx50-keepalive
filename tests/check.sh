@@ -168,14 +168,15 @@ status=$?
 set -e
 expect "a quick command's exit status survives an inherited ignored SIGCHLD" status 127 "$status"
 
-# Sends SIGTERM to the keepalive running in the background as wrapper_pid and
-# expects it to exit within 5 s with the given status; sets status. Then it
-# kills the keepalive's process group, which ends a command left running.
-expect_sigterm_passed_on() {
-    local name="$1" wanted="$2" timed_out=0
+# Sends the named signal (TERM, INT, ...) to the keepalive running in the
+# background as wrapper_pid and expects it to exit within 5 s with the given
+# status; sets status. Then it kills the keepalive's process group, which ends
+# a command left running.
+expect_signal_passed_on() {
+    local signal_name="$1" name="$2" wanted="$3" timed_out=0
     # A keepalive that exited before its command fails the check below
     # instead of stopping the script.
-    kill -TERM "$wrapper_pid" 2>/dev/null || true
+    kill -s "$signal_name" "$wrapper_pid" 2>/dev/null || true
     for _ in $(seq 50); do
         kill -0 "$wrapper_pid" 2>/dev/null || break
         sleep 0.1
@@ -196,11 +197,16 @@ expect_sigterm_passed_on() {
     fi
 }
 
-# A SIGTERM sent to the keepalive's process is passed on to the command.
-setsid "$keepalive" sh -c 'trap "exit 7" TERM; while :; do sleep 0.05; done' >/dev/null 2>&1 &
-wrapper_pid=$!
-sleep 0.5
-expect_sigterm_passed_on "SIGTERM is passed on to the command" 7
+# Each stop signal sent to the keepalive's process is passed on to the command.
+# A background job starts with SIGINT and SIGQUIT ignored, and a shell cannot
+# trap a signal ignored on entry, so env gives them their default action back.
+for signal_name in TERM INT HUP QUIT; do
+    setsid env --default-signal=INT,QUIT "$keepalive" \
+        sh -c "trap 'exit 7' $signal_name; while :; do sleep 0.05; done" >/dev/null 2>&1 &
+    wrapper_pid=$!
+    sleep 0.5
+    expect_signal_passed_on "$signal_name" "SIG$signal_name is passed on to the command" 7
+done
 
 # A stop signal sent before the handlers are in place is held until they are,
 # then passed on: slow-fork.so holds the keepalive for 300 ms after its fork.
@@ -217,7 +223,7 @@ for _ in $(seq 100); do
     fi
     sleep 0.01
 done
-expect_sigterm_passed_on "a SIGTERM sent before the handlers are in place is passed on" 7
+expect_signal_passed_on TERM "a SIGTERM sent before the handlers are in place is passed on" 7
 
 # The command gets the launcher's signal handling: an ignored SIGCHLD is
 # restored after the fork, and the stop signals and the mask are left alone.
@@ -241,7 +247,7 @@ setsid env --ignore-signal=TERM "$keepalive" \
     env --default-signal=TERM sh -c 'trap "exit 7" TERM; while :; do sleep 0.05; done' >/dev/null 2>&1 &
 wrapper_pid=$!
 sleep 0.5
-expect_sigterm_passed_on "with a command, a SIGTERM ignored on entry is passed on" 7
+expect_signal_passed_on TERM "with a command, a SIGTERM ignored on entry is passed on" 7
 
 # Expects the hangup helper's run to have exited with the given status and the
 # keepalive to have passed on no signal, by the log kill-log.so wrote.
