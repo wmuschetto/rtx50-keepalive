@@ -218,6 +218,21 @@ if [[ "$status" == 143 ]]; then
     kill -KILL "$(cat "$held_pid_file")" 2>/dev/null || true
 fi
 
+# The command gets the launcher's signal handling: an ignored SIGCHLD is
+# restored after the fork, and the stop signals and the mask are left alone.
+launcher_signals=(--ignore-signal=CHLD --ignore-signal=HUP --block-signal=USR1)
+set +e
+expected="$(env "${launcher_signals[@]}" cat /proc/self/status | grep -E '^Sig(Ign|Blk):')"
+output="$(env "${launcher_signals[@]}" "$keepalive" cat /proc/self/status 2>/dev/null |
+    grep -E '^Sig(Ign|Blk):')"
+set -e
+if [[ -z "$expected" ]]; then
+    # --block-signal needs GNU coreutils 8.31 or later.
+    fail "the command's ignored and blocked signals are the launcher's" "env cannot set them"
+else
+    expect "the command's ignored and blocked signals are the launcher's" output "$expected" "$output"
+fi
+
 # With a command, a stop signal ignored on entry is still caught and passed on,
 # since a game sets its own handlers. A shell cannot trap a signal ignored on
 # entry, so env gives the command's shell the default back.
