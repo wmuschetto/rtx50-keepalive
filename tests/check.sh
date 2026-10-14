@@ -5,9 +5,10 @@
 # among cc, gcc and clang) and tests how it runs a command and handles
 # signals, and the install path make install and uninstall take (dry runs
 # only). Needs no GPU: the Vulkan loader is pointed at a driver file that
-# does not exist, so the keepalive fails to start, which is the path that must
-# still run the command. One check names a FIFO as the driver file instead, to
-# hold the keepalive in vkCreateInstance. The helpers in tests/ (empty-argv,
+# does not exist and kept from the drivers a loader settings file adds, so
+# the keepalive fails to start, which is the path that must still run the
+# command. One check names a FIFO as the driver file instead, to hold the
+# keepalive in vkCreateInstance. The helpers in tests/ (empty-argv,
 # failed-create, hangup, kill-log, slow-fork, unreaped-child) are built with
 # the first compiler that built it.
 # Exits 1 if any check fails.
@@ -36,6 +37,10 @@ fi
 # The loader reads VK_DRIVER_FILES (1.3.207 and later) or VK_ICD_FILENAMES (older).
 export VK_DRIVER_FILES="$work_dir/no-such-driver.json"
 export VK_ICD_FILENAMES="$VK_DRIVER_FILES"
+# The loader also loads a loader settings file's additional_drivers (Vulkan
+# Configurator writes them) despite VK_DRIVER_FILES; this filter (loader 1.3.234
+# and later) keeps them out.
+export VK_LOADER_DRIVERS_SELECT='*no-such-driver.json,*stalled-driver.json'
 
 failures=0
 pass() { echo "ok    $1"; }
@@ -303,6 +308,23 @@ status=$?
 set -e
 expect_not_passed_on "a hangup's SIGHUP is not passed on when a shell leads the session" 129 \
     "$work_dir/shell-hangup-kills.log"
+
+# kill-log.so creates KILL_LOG when it loads, so as the library of a driver a
+# loader settings file adds, it shows whether the loader loaded that driver.
+mkdir -p "$work_dir/config/vulkan/loader_settings.d"
+printf '{"file_format_version": "1.0.0", "ICD": {"library_path": "%s", "api_version": "1.0.0"}}\n' \
+    "$work_dir/kill-log.so" >"$work_dir/settings-driver.json"
+printf '{"file_format_version": "1.0.0", "settings_array": [{"additional_drivers": [{"path": "%s"}]}]}\n' \
+    "$work_dir/settings-driver.json" >"$work_dir/config/vulkan/loader_settings.d/vk_loader_settings.json"
+XDG_CONFIG_HOME="$work_dir/config" KILL_LOG="$work_dir/settings-driver.log" \
+    "$keepalive" sh -c 'exit 0' >/dev/null 2>&1 || true
+if [[ ! -f "$work_dir/kill-log.so" ]]; then
+    fail "a loader settings file's driver is not loaded" "kill-log.so did not build"
+elif [[ -e "$work_dir/settings-driver.log" ]]; then
+    fail "a loader settings file's driver is not loaded" "the loader loaded $work_dir/settings-driver.json"
+else
+    pass "a loader settings file's driver is not loaded"
+fi
 
 # The command's pid stays taken until the keepalive exits, so a stop signal
 # passed on after the command exited cannot reach a process that took the pid
