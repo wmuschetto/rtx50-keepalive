@@ -14,8 +14,8 @@
 # lists, to see which GPU it opens. One check feeds the hold report fixed job
 # times, another checks a hold's time against the clock, and one runs the job
 # loop through a hold against stand-ins for the Vulkan calls and the clock.
-# The helpers in tests/ (device-list, empty-argv, failed-create, hangup,
-# hold-report, hold-start, keepalive-loop, kill-log, slow-fork,
+# The helpers in tests/ (device-list, empty-argv, failed-create, failed-fork,
+# hangup, hold-report, hold-start, keepalive-loop, kill-log, slow-fork,
 # unreaped-child) are built with the first compiler that built it, and the
 # checks run that compiler's build.
 # Exits 1 if any check fails.
@@ -234,6 +234,23 @@ build "$helper_compiler" -shared -fPIC -o "$work_dir/slow-fork.so" "$repo_dir/te
     env --ignore-signal=CHLD LD_PRELOAD="$work_dir/slow-fork.so" \
         "$keepalive" "$work_dir/no-such-command" >/dev/null 2>&1 || status=$?
 expect "a quick command's exit status survives an inherited ignored SIGCHLD" status 127 "$status"
+
+# A failed fork runs the command in the keepalive's place. The check needs the
+# "fork failed" line, since a preload that cannot load is skipped.
+if build "$helper_compiler" -shared -fPIC -o "$work_dir/failed-fork.so" "$repo_dir/tests/failed-fork.c"; then
+    status=0
+    env LD_PRELOAD="$work_dir/failed-fork.so" "$keepalive" sh -c 'exit 3' >/dev/null 2>"$work_dir/stderr" ||
+        status=$?
+    fork_stderr="$(cat "$work_dir/stderr")"
+    if [[ "$fork_stderr" != *"fork failed"* ]]; then
+        fail "a failed fork still runs the command" \
+            "the keepalive did not report a failed fork; stderr was [$fork_stderr]"
+    else
+        expect "a failed fork still runs the command" status 3 "$status"
+    fi
+else
+    fail "a failed fork still runs the command" "tests/failed-fork.c did not build"
+fi
 
 # Sends the named signal (TERM, INT, ...) to the keepalive running in the
 # background as wrapper_pid and expects it to exit within 5 s with the given
