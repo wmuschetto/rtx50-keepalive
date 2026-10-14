@@ -119,8 +119,9 @@ about 0.3 s of the game (measured 2026-10-14).
 - Every 5 ms it submits a 4-byte `vkCmdFillBuffer` and waits up to 5 ms on that
   job's fence. Up to 2048 jobs can be in flight, so it keeps submitting through
   a 10 s hold.
-- NVIDIA's driver opens a file for each fence, about 2,100 in all. It raises its
-  own open-file soft limit for them, and leaves the game's alone.
+- NVIDIA's driver opens a file for each fence, about 2,100 in all (driver
+  595.99.02, measured 2026-10-13). It raises its own open-file soft limit for
+  them, and leaves the game's alone.
 - It turns off Vulkan layers for its own device (Steam's overlay, MangoHud), so
   its jobs go straight to the driver. This needs Vulkan loader 1.3.234 or later
   (Ubuntu 22.04 ships 1.3.204, which keeps the layers on). A layer that
