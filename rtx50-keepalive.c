@@ -431,13 +431,19 @@ static int keepalive_start(Keepalive *k) {
     return 0;
 }
 
+/* The "s" of a plural, for a count of anything but 1. */
+static const char *plural(uint64_t count) {
+    return count == 1 ? "" : "s";
+}
+
 static void close_hold(Hold *hold, Totals *totals) {
     if (hold->late_jobs == 0) {
         return;
     }
     totals->holds++;
-    fprintf(stderr, PROGRAM ": %s hold: %llu jobs late, longest fence %.1f ms\n", hold->started_at,
-            (unsigned long long)hold->late_jobs, (double)hold->longest_ns / NANOSECONDS_PER_MILLISECOND);
+    fprintf(stderr, PROGRAM ": %s hold: %llu job%s late, longest fence %.1f ms\n", hold->started_at,
+            (unsigned long long)hold->late_jobs, plural(hold->late_jobs),
+            (double)hold->longest_ns / NANOSECONDS_PER_MILLISECOND);
     hold->late_jobs = 0;
 }
 
@@ -548,10 +554,11 @@ static int keepalive_run(Keepalive *k, int (*should_stop)(void)) {
 
 static void keepalive_report(Keepalive *k) {
     close_hold(&k->hold, &k->totals);
-    fprintf(stderr, PROGRAM ": stopped after %.0f s; %llu jobs, %llu late in %llu holds, longest fence %.1f ms\n",
+    fprintf(stderr, PROGRAM ": stopped after %.0f s; %llu job%s, %llu late in %llu hold%s, longest fence %.1f ms\n",
             (double)(monotonic_ns() - k->started_ns) / NANOSECONDS_PER_SECOND,
-            (unsigned long long)k->totals.submitted, (unsigned long long)k->totals.late,
-            (unsigned long long)k->totals.holds, (double)k->totals.longest_ns / NANOSECONDS_PER_MILLISECOND);
+            (unsigned long long)k->totals.submitted, plural(k->totals.submitted),
+            (unsigned long long)k->totals.late, (unsigned long long)k->totals.holds, plural(k->totals.holds),
+            (double)k->totals.longest_ns / NANOSECONDS_PER_MILLISECOND);
 }
 
 /* 1 once the command has exited (its exit in command_exit) or its status is

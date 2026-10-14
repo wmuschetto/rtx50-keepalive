@@ -490,7 +490,7 @@ fi
 # is the wall-clock time the hold began; hold-start checks it.
 # -Wno-unused-function: the helper calls only part of the keepalive's source.
 hold_report_wanted="rtx50-keepalive: TIME hold: 2 jobs late, longest fence 45.0 ms
-rtx50-keepalive: TIME hold: 1 jobs late, longest fence 21.0 ms
+rtx50-keepalive: TIME hold: 1 job late, longest fence 21.0 ms
 rtx50-keepalive: TIME hold: 2 jobs late, longest fence 25.0 ms
 rtx50-keepalive: stopped after 0 s; 8 jobs, 5 late in 3 holds, longest fence 45.0 ms"
 if build "$helper_compiler" -Wno-unused-function \
@@ -519,7 +519,7 @@ fi
 # and on until the ring of slots has wrapped three times. It exits with a
 # message on a fence reset, submitted or waited on out of turn.
 loop_wanted="rtx50-keepalive: TIME hold: 2048 jobs late, longest fence 10350.0 ms
-rtx50-keepalive: stopped after 31 s; 6144 jobs, 2048 late in 1 holds, longest fence 10350.0 ms"
+rtx50-keepalive: stopped after 31 s; 6144 jobs, 2048 late in 1 hold, longest fence 10350.0 ms"
 if build "$helper_compiler" -Wno-unused-function \
     -o "$work_dir/keepalive-loop" "$repo_dir/tests/keepalive-loop.c" -lvulkan; then
     output="$("$work_dir/keepalive-loop" 2>&1 | sed -E 's/[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}/TIME/')" || true

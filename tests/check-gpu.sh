@@ -37,7 +37,7 @@ standalone_status=0
     standalone_status=$?
 standalone="$(cat "$work_dir/standalone")"
 # Jobs above 0: a stop signal during a slow start ends the keepalive before its first job.
-jobs_pattern='; ([0-9]+) jobs, 0 late in 0 holds'
+jobs_pattern='; ([0-9]+) jobs?, 0 late in 0 holds'
 if [[ "$standalone_status" -eq 0 && "$standalone" != *"the keepalive is off"* &&
     "$standalone" == *"a 4-byte fill every 5 ms"* && "$standalone" =~ $jobs_pattern &&
     "${BASH_REMATCH[1]}" -gt 0 ]]; then
@@ -53,7 +53,7 @@ command_status=0
 elapsed_ms=$(( ($(date +%s%N) - started_ns) / 1000000 ))
 with_command="$(cat "$work_dir/with-command")"
 # Jobs above 0: a start that outlasts the command ends the keepalive before its first job.
-jobs_pattern='stopped after [0-9]+ s; ([0-9]+) jobs'
+jobs_pattern='stopped after [0-9]+ s; ([0-9]+) jobs?'
 if [[ "$command_status" -eq 42 && "$with_command" != *"the keepalive is off"* &&
     "$with_command" =~ $jobs_pattern && "${BASH_REMATCH[1]}" -gt 0 && "$elapsed_ms" -lt 3000 ]]; then
     pass "stops within 1 s of its command's exit, with its status (${elapsed_ms} ms for a 2 s command)"
@@ -63,7 +63,7 @@ else
 fi
 
 timeout -s INT 2 "$work_dir/rtx50-keepalive-every-fence-late" 2>"$work_dir/hold" || true
-if grep -q ' hold: [0-9]* jobs late, longest fence ' "$work_dir/hold"; then
+if grep -qE ' hold: [0-9]+ jobs? late, longest fence ' "$work_dir/hold"; then
     pass "reports a hold"
 else
     fail "reports a hold" "stderr was [$(cat "$work_dir/hold")]"
