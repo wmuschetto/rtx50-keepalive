@@ -26,11 +26,14 @@ build() {
 }
 
 compilers_built=0
+# The first compiler that built it also builds the test helpers.
+helper_compiler=""
 for compiler in cc gcc clang; do
     if command -v "$compiler" >/dev/null; then
         if build "$compiler" "$work_dir/rtx50-keepalive-$compiler"; then
             pass "builds with $compiler and -Werror"
             compilers_built=$((compilers_built + 1))
+            helper_compiler="${helper_compiler:-$compiler}"
         else
             fail "builds with $compiler and -Werror" "see the compiler output above"
         fi
@@ -146,6 +149,16 @@ else
     set -e
     expect "SIGTERM is passed on to the command" status 7 "$status"
 fi
+
+# A terminal emulator runs the keepalive as the leader of a new session; when
+# the window closes, the kernel sends SIGHUP to the leader alone.
+set +e
+"$helper_compiler" -std=c17 -O2 -Wall -Wextra -Wshadow -Wconversion -Werror \
+    -o "$work_dir/hangup" "$repo_dir/tests/hangup.c" &&
+    "$work_dir/hangup" "$keepalive" sh -c 'trap "exit 9" HUP; while :; do sleep 0.05; done' >/dev/null 2>&1
+status=$?
+set -e
+expect "a terminal's hangup is passed on to the command" status 9 "$status"
 
 run
 expect "without a command and without a GPU it exits 1" status 1 "$status"

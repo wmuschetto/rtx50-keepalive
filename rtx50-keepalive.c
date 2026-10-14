@@ -114,6 +114,8 @@ static Keepalive keepalive;
 
 /* Set in the parent before the signal handlers are installed; 0 without a command. */
 static volatile sig_atomic_t command_pid = 0;
+/* Set with command_pid: whether this process leads its session. */
+static volatile sig_atomic_t leads_session = 0;
 static volatile sig_atomic_t stop_requested = 0;
 static int command_status;
 /* Set when waitpid fails and the command's status cannot be known. */
@@ -124,8 +126,10 @@ static void on_stop_signal(int signal_number, siginfo_t *info, void *context) {
     if (command_pid > 0) {
         /* Pass on a signal a process sent to this one. A signal from the
          * terminal (si_code SI_KERNEL) went to the whole process group, the
-         * command included, so passing it on would deliver it twice. */
-        if (info->si_code <= 0) {
+         * command included, so passing it on would deliver it twice; the
+         * SIGHUP of a hangup is the exception, sent to the session leader
+         * alone. */
+        if (info->si_code <= 0 || (signal_number == SIGHUP && leads_session)) {
             int saved_errno = errno;
             kill((pid_t)command_pid, signal_number);
             errno = saved_errno;
@@ -605,6 +609,7 @@ static int run_with_command(char **command) {
         exec_command(command);
     }
     command_pid = (sig_atomic_t)pid;
+    leads_session = getsid(0) == getpid();
     install_signal_handlers();
     sigprocmask(SIG_SETMASK, &previous, NULL);
 
