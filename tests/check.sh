@@ -241,7 +241,7 @@ expect "stdin reaches the command" stdout hello "$output"
 
 run "$work_dir/no-such-command"
 expect "a missing command exits 127" status 127 "$status"
-expect_contains "a missing command is named" "cannot run" "$stderr"
+expect_contains "a missing command is named" "cannot run $work_dir/no-such-command" "$stderr"
 
 touch "$work_dir/not-executable"
 run "$work_dir/not-executable"
