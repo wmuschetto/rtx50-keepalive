@@ -80,12 +80,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateInstance(const VkInstanceCreateInfo *info
 VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDevices(VkInstance instance, uint32_t *count,
                                                           VkPhysicalDevice *gpus) {
     CHECK(instance);
-    if (gpus != NULL) {
-        if (*count == 0) {
-            return VK_INCOMPLETE;
-        }
-        gpus[0] = CREATED(VkPhysicalDevice);
-    }
+    gpus[0] = CREATED(VkPhysicalDevice);
     *count = 1;
     return VK_SUCCESS;
 }
@@ -103,12 +98,7 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceProperties(VkPhysicalDevice gpu,
 VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceQueueFamilyProperties(VkPhysicalDevice gpu, uint32_t *count,
                                                                     VkQueueFamilyProperties *families) {
     CHECK(gpu);
-    if (families != NULL) {
-        if (*count == 0) {
-            return;
-        }
-        families[0] = (VkQueueFamilyProperties){.queueFlags = VK_QUEUE_GRAPHICS_BIT, .queueCount = 1};
-    }
+    families[0] = (VkQueueFamilyProperties){.queueFlags = VK_QUEUE_GRAPHICS_BIT, .queueCount = 1};
     *count = 1;
 }
 
