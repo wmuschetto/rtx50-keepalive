@@ -268,6 +268,22 @@ else
     fail "a failed fork still runs the command" "tests/failed-fork.c did not build"
 fi
 
+# Whether a signal mask from /proc/PID/status (hexadecimal) holds the named signal.
+mask_has() {
+    (( 16#$1 >> ($(kill -l "$2") - 1) & 1 ))
+}
+
+# Waits up to 5 s for the named file to hold a pid, which a check's command
+# writes once its trap is set.
+wait_for_pid_file() {
+    for _ in $(seq 500); do
+        if [[ -s "$1" ]]; then
+            return 0
+        fi
+        sleep 0.01
+    done
+}
+
 # Sends the named signal (TERM, INT, ...) to the keepalive running in the
 # background as wrapper_pid and expects it to exit within 5 s with the given
 # status; sets status. Then it kills the keepalive's process group, which ends
@@ -298,11 +314,14 @@ expect_signal_passed_on() {
 # Each stop signal sent to the keepalive's process is passed on to the command.
 # A background job starts with SIGINT and SIGQUIT ignored, and a shell cannot
 # trap a signal ignored on entry, so env gives them their default action back.
+# The command writes its pid to descriptor 3 once its trap is set.
 for signal_name in TERM INT HUP QUIT; do
+    ready_file="$work_dir/ready-$signal_name.pid"
     setsid env --default-signal=INT,QUIT "$keepalive" \
-        sh -c "trap 'exit 7' $signal_name; while :; do sleep 0.05; done" >/dev/null 2>&1 &
+        sh -c "trap 'exit 7' $signal_name; echo \$\$ >&3; while :; do sleep 0.05; done" \
+        >/dev/null 2>&1 3>"$ready_file" &
     wrapper_pid=$!
-    sleep 0.5
+    wait_for_pid_file "$ready_file"
     expect_signal_passed_on "$signal_name" "SIG$signal_name is passed on to the command" 7
 done
 
@@ -314,14 +333,19 @@ setsid env LD_PRELOAD="$work_dir/slow-fork.so" "$keepalive" \
     sh -c 'trap "exit 7" TERM; echo $$ >&3; while :; do sleep 0.05; done' \
     >/dev/null 2>&1 3>"$held_pid_file" &
 wrapper_pid=$!
-# The pid means the fork is done and the keepalive is in its 300 ms hold.
-for _ in $(seq 100); do
-    if [[ -s "$held_pid_file" ]]; then
-        break
-    fi
-    sleep 0.01
-done
-expect_signal_passed_on TERM "a SIGTERM sent before the handlers are in place is passed on" 7
+# The pid means the fork is done and the keepalive is in its 300 ms hold,
+# unless the command took longer than that to start, which SigCgt shows.
+wait_for_pid_file "$held_pid_file"
+held_name="a SIGTERM sent before the handlers are in place is passed on"
+caught_mask="$(awk '/^SigCgt:/ { print $2 }' "/proc/$wrapper_pid/status" 2>/dev/null)" || true
+if [[ -n "$caught_mask" ]] && mask_has "$caught_mask" TERM; then
+    kill -KILL -- "-$wrapper_pid" 2>/dev/null || true
+    wait "$wrapper_pid" 2>/dev/null || true
+    wrapper_pid=""
+    fail "$held_name" "the handlers were in place first: the command took over slow-fork.so's 300 ms to start"
+else
+    expect_signal_passed_on TERM "$held_name" 7
+fi
 
 # The command gets the launcher's signal handling: an ignored SIGCHLD is
 # restored after the fork, and the stop signals and the mask are left alone.
@@ -339,10 +363,12 @@ fi
 # With a command, a stop signal ignored on entry is still caught and passed on,
 # since a game sets its own handlers. A shell cannot trap a signal ignored on
 # entry, so env gives the command's shell the default back.
+ready_file="$work_dir/ready-ignored-TERM.pid"
 setsid env --ignore-signal=TERM "$keepalive" \
-    env --default-signal=TERM sh -c 'trap "exit 7" TERM; while :; do sleep 0.05; done' >/dev/null 2>&1 &
+    env --default-signal=TERM sh -c 'trap "exit 7" TERM; echo $$ >&3; while :; do sleep 0.05; done' \
+    >/dev/null 2>&1 3>"$ready_file" &
 wrapper_pid=$!
-sleep 0.5
+wait_for_pid_file "$ready_file"
 expect_signal_passed_on TERM "with a command, a SIGTERM ignored on entry is passed on" 7
 
 # Expects the hangup helper's run to have exited with the given status and the
@@ -470,11 +496,6 @@ else
         "tests/keepalive-loop.c did not build"
 fi
 
-# Whether a signal mask from /proc/PID/status (hexadecimal) holds the named signal.
-mask_has() {
-    (( 16#$1 >> ($(kill -l "$2") - 1) & 1 ))
-}
-
 # Without a command, a stop signal ignored on entry stays ignored, as nohup and
 # a shell's background jobs rely on. A FIFO as the driver file holds the
 # keepalive in vkCreateInstance, after its signal handlers are set up: the
@@ -486,10 +507,16 @@ mkfifo "$work_dir/stalled-driver.json"
 VK_DRIVER_FILES="$work_dir/stalled-driver.json" VK_ICD_FILENAMES="$work_dir/stalled-driver.json" \
     env --ignore-signal=HUP "$keepalive" >/dev/null 2>"$work_dir/stderr" &
 wrapper_pid=$!
-sleep 0.5
-ignored_mask="" caught_mask=""
-read -r ignored_mask caught_mask < <(awk '/^SigIgn:/ { ignored = $2 } /^SigCgt:/ { caught = $2 }
-    END { print ignored, caught }' "/proc/$wrapper_pid/status" 2>/dev/null) || true
+# Up to 5 s, until SIGTERM is caught or the keepalive has exited.
+for _ in $(seq 500); do
+    ignored_mask="" caught_mask=""
+    read -r ignored_mask caught_mask < <(awk '/^SigIgn:/ { ignored = $2 } /^SigCgt:/ { caught = $2 }
+        END { print ignored, caught }' "/proc/$wrapper_pid/status" 2>/dev/null) || true
+    if [[ -z "$caught_mask" ]] || mask_has "$caught_mask" TERM; then
+        break
+    fi
+    sleep 0.01
+done
 kill -KILL "$wrapper_pid" 2>/dev/null || true
 wait "$wrapper_pid" 2>/dev/null || true
 wrapper_pid=""
