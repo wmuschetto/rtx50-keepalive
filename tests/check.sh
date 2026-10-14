@@ -58,21 +58,19 @@ build() {
     "$compiler" -std=c17 -O2 -Wall -Wextra -Wshadow -Wconversion -Werror "$@"
 }
 
-compilers_built=0
 # The first compiler that built it also builds the test helpers.
 helper_compiler=""
 for compiler in cc gcc clang; do
     if command -v "$compiler" >/dev/null; then
         if build "$compiler" -o "$work_dir/rtx50-keepalive-$compiler" "$repo_dir/rtx50-keepalive.c" -lvulkan; then
             pass "builds with $compiler and -Werror"
-            compilers_built=$((compilers_built + 1))
             helper_compiler="${helper_compiler:-$compiler}"
         else
             fail "builds with $compiler and -Werror" "see the compiler output above"
         fi
     fi
 done
-if [[ "$compilers_built" -eq 0 ]]; then
+if [[ -z "$helper_compiler" ]]; then
     echo "FAIL  no compiler built it; nothing else can be tested"
     exit 1
 fi
