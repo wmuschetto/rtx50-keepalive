@@ -115,6 +115,18 @@ run sh -c 'echo ran'
 expect "the command runs when the keepalive cannot start" stdout ran "$stdout"
 expect_contains "the failed start is reported on stderr" "the keepalive is off" "$stderr"
 
+# A failed create may leave a handle it never created in its output, and
+# destroying that would crash the keepalive and orphan the command.
+# failed-create.so makes vkCreateInstance do that and exits 66 if the handle is
+# destroyed.
+set +e
+"$helper_compiler" -std=c17 -O2 -Wall -Wextra -Wshadow -Wconversion -Werror -shared -fPIC \
+    -o "$work_dir/failed-create.so" "$repo_dir/tests/failed-create.c" &&
+    env LD_PRELOAD="$work_dir/failed-create.so" "$keepalive" sh -c 'exit 5' >/dev/null 2>&1
+status=$?
+set -e
+expect "the output of a failed create is not destroyed" status 5 "$status"
+
 set +e
 output="$(echo hello | "$keepalive" cat 2>/dev/null)"
 set -e

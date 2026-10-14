@@ -285,8 +285,10 @@ static int find_memory_type(VkPhysicalDevice gpu, uint32_t allowed_types, uint32
     return -1;
 }
 
-/* Destroys whatever keepalive_start created; safe after a partial start. Used
- * when the keepalive fails while its command runs on. */
+/* Destroys whatever keepalive_start created; safe after a partial start,
+ * since a handle is stored only once its create succeeded (a failed create
+ * leaves its output undefined). Used when the keepalive fails while its
+ * command runs on. */
 static void keepalive_destroy(Keepalive *k) {
     if (k->device != VK_NULL_HANDLE) {
         vkDeviceWaitIdle(k->device); /* best effort: the objects go either way */
@@ -315,9 +317,11 @@ static int create_device(Keepalive *k, VkPhysicalDeviceProperties *properties, V
         .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
         .pApplicationInfo = &application,
     };
-    if (failed(vkCreateInstance(&instance_info, NULL, &k->instance), "vkCreateInstance")) {
+    VkInstance instance;
+    if (failed(vkCreateInstance(&instance_info, NULL, &instance), "vkCreateInstance")) {
         return -1;
     }
+    k->instance = instance;
     *gpu = find_nvidia_gpu(k->instance, properties);
     if (*gpu == VK_NULL_HANDLE || find_graphics_queue_family(*gpu, queue_family) != 0) {
         return -1;
@@ -334,9 +338,11 @@ static int create_device(Keepalive *k, VkPhysicalDeviceProperties *properties, V
         .queueCreateInfoCount = 1,
         .pQueueCreateInfos = &queue_info,
     };
-    if (failed(vkCreateDevice(*gpu, &device_info, NULL, &k->device), "vkCreateDevice")) {
+    VkDevice device;
+    if (failed(vkCreateDevice(*gpu, &device_info, NULL, &device), "vkCreateDevice")) {
         return -1;
     }
+    k->device = device;
     vkGetDeviceQueue(k->device, *queue_family, 0, &k->queue);
     return 0;
 }
@@ -348,21 +354,24 @@ static int create_buffer(Keepalive *k, VkPhysicalDevice gpu) {
         .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
     };
-    if (failed(vkCreateBuffer(k->device, &buffer_info, NULL, &k->buffer), "vkCreateBuffer")) {
+    VkBuffer buffer;
+    if (failed(vkCreateBuffer(k->device, &buffer_info, NULL, &buffer), "vkCreateBuffer")) {
         return -1;
     }
+    k->buffer = buffer;
     VkMemoryRequirements requirements;
     vkGetBufferMemoryRequirements(k->device, k->buffer, &requirements);
     VkMemoryAllocateInfo allocation = {
         .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
         .allocationSize = requirements.size,
     };
+    VkDeviceMemory memory;
     if (find_memory_type(gpu, requirements.memoryTypeBits, &allocation.memoryTypeIndex) != 0 ||
-        failed(vkAllocateMemory(k->device, &allocation, NULL, &k->memory), "vkAllocateMemory") ||
-        failed(vkBindBufferMemory(k->device, k->buffer, k->memory, 0), "vkBindBufferMemory")) {
+        failed(vkAllocateMemory(k->device, &allocation, NULL, &memory), "vkAllocateMemory")) {
         return -1;
     }
-    return 0;
+    k->memory = memory;
+    return failed(vkBindBufferMemory(k->device, k->buffer, k->memory, 0), "vkBindBufferMemory") ? -1 : 0;
 }
 
 static int record_jobs(Keepalive *k, uint32_t queue_family) {
@@ -370,9 +379,11 @@ static int record_jobs(Keepalive *k, uint32_t queue_family) {
         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
         .queueFamilyIndex = queue_family,
     };
-    if (failed(vkCreateCommandPool(k->device, &pool_info, NULL, &k->pool), "vkCreateCommandPool")) {
+    VkCommandPool pool;
+    if (failed(vkCreateCommandPool(k->device, &pool_info, NULL, &pool), "vkCreateCommandPool")) {
         return -1;
     }
+    k->pool = pool;
     static VkCommandBuffer buffers[SLOT_COUNT];
     VkCommandBufferAllocateInfo buffers_info = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
