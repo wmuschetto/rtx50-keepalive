@@ -2,19 +2,20 @@
  * Usage: hold-start
  *
  * Checks the time a hold report gives, the time its first late job was
- * submitted: format_wall_time with ago_ns of AGO_SECONDS must print the UTC
- * time that long before now as HH:MM:SS.mmm, within 1 s. Writes what it got
- * to stderr and exits 1 if not. tests/check.sh builds it from the keepalive's
- * source and runs it.
+ * submitted: record_finished, given a first late job that took AGO_SECONDS,
+ * must date the hold at the UTC time that long before now as HH:MM:SS.mmm,
+ * within 1 s. Writes what it got to stderr and exits 1 if not. tests/check.sh
+ * builds it from the keepalive's source and runs it.
  */
 #define main keepalive_main
 #include "../rtx50-keepalive.c"
 #undef main
 
 #define MILLISECONDS_PER_DAY 86400000LL
-/* Far longer than the call takes, so a wrong sign or unit shows. */
+/* Far longer than the call takes, so a hold dated when it was seen, or a
+ * wrong sign or unit, shows. */
 #define AGO_SECONDS 5400
-/* format_wall_time reads the clock just after this program does. */
+/* record_finished reads the clock just after this program does. */
 #define TOLERANCE_MS 1000
 
 int main(void) {
@@ -22,8 +23,10 @@ int main(void) {
     tzset();
     struct timespec before;
     clock_gettime(CLOCK_REALTIME, &before);
-    char text[64];
-    format_wall_time(text, sizeof text, AGO_SECONDS * NANOSECONDS_PER_SECOND);
+    Hold hold = {0};
+    Totals totals = {0};
+    record_finished(AGO_SECONDS * NANOSECONDS_PER_SECOND, &hold, &totals);
+    const char *text = hold.started_at;
     int hours, minutes, seconds, milliseconds;
     if (sscanf(text, "%2d:%2d:%2d.%3d", &hours, &minutes, &seconds, &milliseconds) != 4) {
         fprintf(stderr, "hold-start: got [%s], not HH:MM:SS.mmm\n", text);
