@@ -18,7 +18,8 @@
  * given, runs the keepalive beside it, and exits with the command's status
  * once the command exits. It never touches the command's process: no
  * injection, no Vulkan layer, no tracing. If the keepalive cannot start, the
- * command runs anyway. Without a command it runs until SIGINT or SIGTERM.
+ * command runs anyway. Without a command it runs until SIGINT, SIGTERM, SIGHUP
+ * or SIGQUIT; one its launcher ignores, as nohup ignores SIGHUP, stays ignored.
  *
  * It writes one line to stderr per hold: a run of its own jobs whose fences
  * took longer than LATE_FENCE_MS, which means the driver held this program's
@@ -154,6 +155,13 @@ static void install_signal_handlers(void) {
     on_stop.sa_flags = SA_SIGINFO | SA_RESTART;
     sigemptyset(&on_stop.sa_mask);
     for (size_t index = 0; index < STOP_SIGNAL_COUNT; index++) {
+        struct sigaction inherited;
+        /* Without a command, a signal the launcher ignores stays ignored, as
+         * nohup and a shell's background jobs rely on. */
+        if (command_pid == 0 && sigaction(STOP_SIGNALS[index], NULL, &inherited) == 0 &&
+            inherited.sa_handler == SIG_IGN) {
+            continue;
+        }
         sigaction(STOP_SIGNALS[index], &on_stop, NULL);
     }
     struct sigaction on_child;

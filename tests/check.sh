@@ -175,6 +175,29 @@ expect "a terminal's hangup is passed on to the command" status 9 "$status"
 run
 expect "without a command and without a GPU it exits 1" status 1 "$status"
 
+# Without a command, a stop signal ignored on entry stays ignored, as nohup and
+# a shell's background jobs rely on. A FIFO as the driver file holds the
+# keepalive in vkCreateInstance, after its signal handlers are set up: the
+# loader waits to open it until a writer comes (Vulkan loader 1.4.341,
+# measured 2026-10-14).
+mkfifo "$work_dir/stalled-driver.json"
+VK_DRIVER_FILES="$work_dir/stalled-driver.json" VK_ICD_FILENAMES="$work_dir/stalled-driver.json" \
+    env --ignore-signal=HUP "$keepalive" >/dev/null 2>&1 &
+wrapper_pid=$!
+sleep 0.5
+ignored_mask="$(awk '/^SigIgn:/ { print $2 }' "/proc/$wrapper_pid/status" 2>/dev/null || true)"
+kill -KILL "$wrapper_pid" 2>/dev/null || true
+wait "$wrapper_pid" 2>/dev/null || true
+if [[ -z "$ignored_mask" ]]; then
+    fail "without a command, a SIGHUP ignored on entry stays ignored" \
+        "it exited before the check, so the loader did not wait on the FIFO"
+elif (( 16#$ignored_mask & 1 )); then
+    pass "without a command, a SIGHUP ignored on entry stays ignored"
+else
+    fail "without a command, a SIGHUP ignored on entry stays ignored" \
+        "SigIgn was $ignored_mask, without SIGHUP's bit"
+fi
+
 if command -v shellcheck >/dev/null; then
     if shellcheck "$repo_dir"/tests/*.sh; then
         pass "shellcheck finds nothing in tests/"
