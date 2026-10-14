@@ -390,12 +390,15 @@ wrapper_pid=$!
 wait_for_pid_file "$ready_file"
 expect_signal_passed_on TERM "with a command, a SIGTERM ignored on entry is passed on" 7
 
-# Expects the hangup helper's run to have exited with the given status and the
-# keepalive to have passed on no signal, by the log kill-log.so wrote.
-expect_not_passed_on() {
-    local name="$1" wanted="$2" kill_log="$3"
+# Expects the hangup helper's run to have exited with the given status, and
+# shows the run's stderr, from the given file, when it did not. Given the log
+# kill-log.so wrote, it also expects the keepalive to have passed on no signal.
+expect_hangup_run() {
+    local name="$1" wanted="$2" stderr_file="$3" kill_log="${4:-}"
     if [[ "$status" != "$wanted" ]]; then
-        fail "$name" "status was [$status], expected [$wanted]"
+        fail "$name" "status was [$status], expected [$wanted]; stderr was [$(cat "$stderr_file" 2>/dev/null)]"
+    elif [[ -z "$kill_log" ]]; then
+        pass "$name"
     elif [[ ! -f "$kill_log" ]]; then
         fail "$name" "kill-log.so wrote no log"
     else
@@ -411,8 +414,8 @@ expect_not_passed_on() {
 status=0
 build "$helper_compiler" -o "$work_dir/hangup" "$repo_dir/tests/hangup.c" &&
     "$work_dir/hangup" "$keepalive" sh -c 'trap "exit 9" HUP; echo >&3; while :; do sleep 0.05; done' \
-        >/dev/null 2>&1 || status=$?
-expect "a terminal's hangup is passed on to the command" status 9 "$status"
+        >/dev/null 2>"$work_dir/hangup.stderr" || status=$?
+expect_hangup_run "a terminal's hangup is passed on to the command" 9 "$work_dir/hangup.stderr"
 
 # The terminal's Ctrl-C goes to its whole foreground process group, the command
 # included, so passing it on would deliver it twice. kill-log.so logs each
@@ -422,8 +425,9 @@ build "$helper_compiler" -shared -fPIC -o "$work_dir/kill-log.so" "$repo_dir/tes
     "$work_dir/hangup" --interrupt \
         env LD_PRELOAD="$work_dir/kill-log.so" KILL_LOG="$work_dir/interrupt-kills.log" \
         "$keepalive" sh -c 'trap "exit 9" INT; echo >&3; while :; do sleep 0.05; done' \
-        >/dev/null 2>&1 || status=$?
-expect_not_passed_on "Ctrl-C is not passed on to the command" 9 "$work_dir/interrupt-kills.log"
+        >/dev/null 2>"$work_dir/interrupt.stderr" || status=$?
+expect_hangup_run "Ctrl-C is not passed on to the command" 9 "$work_dir/interrupt.stderr" \
+    "$work_dir/interrupt-kills.log"
 
 # When a shell leads the session, the hangup's SIGHUP ends the shell, and the
 # kernel then sends SIGHUP to the shell's whole process group, the keepalive
@@ -433,9 +437,9 @@ status=0
 "$work_dir/hangup" sh -c '"$@"; exit' sh \
     env LD_PRELOAD="$work_dir/kill-log.so" KILL_LOG="$work_dir/shell-hangup-kills.log" \
     "$keepalive" sh -c 'trap "exit 9" HUP; echo >&3; while :; do sleep 0.05; done' \
-    >/dev/null 2>&1 || status=$?
-expect_not_passed_on "a hangup's SIGHUP is not passed on when a shell leads the session" 129 \
-    "$work_dir/shell-hangup-kills.log"
+    >/dev/null 2>"$work_dir/shell-hangup.stderr" || status=$?
+expect_hangup_run "a hangup's SIGHUP is not passed on when a shell leads the session" 129 \
+    "$work_dir/shell-hangup.stderr" "$work_dir/shell-hangup-kills.log"
 
 # kill-log.so creates KILL_LOG when it loads, so as the library of a driver a
 # loader settings file adds, it shows whether the loader loaded that driver.
