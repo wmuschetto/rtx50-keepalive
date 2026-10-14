@@ -42,6 +42,8 @@ export VK_ICD_FILENAMES="$VK_DRIVER_FILES"
 # Configurator writes them) despite VK_DRIVER_FILES; this filter (loader 1.3.234
 # and later) keeps them out.
 export VK_LOADER_DRIVERS_SELECT='*no-such-driver.json,*stalled-driver.json'
+# The keepalive sets this for itself; a check expects the command not to see it.
+unset VK_LOADER_LAYERS_DISABLE
 
 failures=0
 pass() { echo "ok    $1"; }
