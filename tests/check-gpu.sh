@@ -27,16 +27,21 @@ build -o "$work_dir/rtx50-keepalive"
 build -DLATE_FENCE_MS=0 -o "$work_dir/rtx50-keepalive-every-fence-late"
 keepalive="$work_dir/rtx50-keepalive"
 
-# Standalone, under the soft limit systemd gives its units.
-(ulimit -Sn 1024 && timeout -s INT 2 "$keepalive" 2>"$work_dir/standalone") || true
+# Standalone, under the soft limit systemd gives its units. --preserve-status
+# gives the keepalive's own exit status: 1 if it failed after starting.
+standalone_status=0
+(ulimit -Sn 1024 && timeout --preserve-status -s INT 2 "$keepalive" 2>"$work_dir/standalone") ||
+    standalone_status=$?
 standalone="$(cat "$work_dir/standalone")"
 # Jobs above 0: a stop signal during a slow start ends the keepalive before its first job.
 jobs_pattern='; ([0-9]+) jobs, 0 late in 0 holds'
-if [[ "$standalone" == *"a 4-byte fill every 5 ms"* && "$standalone" =~ $jobs_pattern &&
+if [[ "$standalone_status" -eq 0 && "$standalone" != *"the keepalive is off"* &&
+    "$standalone" == *"a 4-byte fill every 5 ms"* && "$standalone" =~ $jobs_pattern &&
     "${BASH_REMATCH[1]}" -gt 0 ]]; then
     pass "runs and stops cleanly under a 1024 open-file soft limit"
 else
-    fail "runs and stops cleanly under a 1024 open-file soft limit" "stderr was [$standalone]"
+    fail "runs and stops cleanly under a 1024 open-file soft limit" \
+        "exit status $standalone_status; stderr was [$standalone]"
 fi
 
 started_ns="$(date +%s%N)"
@@ -45,7 +50,8 @@ elapsed_ms=$(( ($(date +%s%N) - started_ns) / 1000000 ))
 with_command="$(cat "$work_dir/with-command")"
 # Jobs above 0: a start that outlasts the command ends the keepalive before its first job.
 jobs_pattern='stopped after [0-9]+ s; ([0-9]+) jobs'
-if [[ "$with_command" =~ $jobs_pattern && "${BASH_REMATCH[1]}" -gt 0 && "$elapsed_ms" -lt 3000 ]]; then
+if [[ "$with_command" != *"the keepalive is off"* && "$with_command" =~ $jobs_pattern &&
+    "${BASH_REMATCH[1]}" -gt 0 && "$elapsed_ms" -lt 3000 ]]; then
     pass "stops within 1 s of its command's exit (${elapsed_ms} ms for a 2 s command)"
 else
     fail "stops within 1 s of its command's exit" "took ${elapsed_ms} ms; stderr was [$with_command]"
