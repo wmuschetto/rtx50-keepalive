@@ -419,6 +419,8 @@ expect_not_passed_on "a hangup's SIGHUP is not passed on when a shell leads the 
 
 # kill-log.so creates KILL_LOG when it loads, so as the library of a driver a
 # loader settings file adds, it shows whether the loader loaded that driver.
+# It checks the tests' own VK_LOADER_DRIVERS_SELECT filter above, which keeps
+# them off a real GPU, and nothing in the keepalive.
 mkdir -p "$work_dir/config/vulkan/loader_settings.d"
 printf '{"file_format_version": "1.0.0", "ICD": {"library_path": "%s", "api_version": "1.0.0"}}\n' \
     "$work_dir/kill-log.so" >"$work_dir/settings-driver.json"
@@ -427,11 +429,11 @@ printf '{"file_format_version": "1.0.0", "settings_array": [{"additional_drivers
 XDG_CONFIG_HOME="$work_dir/config" KILL_LOG="$work_dir/settings-driver.log" \
     "$keepalive" sh -c 'exit 0' >/dev/null 2>&1 || true
 if [[ ! -f "$work_dir/kill-log.so" ]]; then
-    fail "a loader settings file's driver is not loaded" "kill-log.so did not build"
+    fail "the tests keep a loader settings file's driver out" "kill-log.so did not build"
 elif [[ -e "$work_dir/settings-driver.log" ]]; then
-    fail "a loader settings file's driver is not loaded" "the loader loaded $work_dir/settings-driver.json"
+    fail "the tests keep a loader settings file's driver out" "the loader loaded $work_dir/settings-driver.json"
 else
-    pass "a loader settings file's driver is not loaded"
+    pass "the tests keep a loader settings file's driver out"
 fi
 
 # The command's pid stays taken until the keepalive exits, so a stop signal
