@@ -355,24 +355,36 @@ else
     fail "an empty argv runs no command" "tests/empty-argv.c did not build"
 fi
 
+# Whether a signal mask from /proc/PID/status (hexadecimal) holds the named signal.
+mask_has() {
+    (( 16#$1 >> ($(kill -l "$2") - 1) & 1 ))
+}
+
 # Without a command, a stop signal ignored on entry stays ignored, as nohup and
 # a shell's background jobs rely on. A FIFO as the driver file holds the
 # keepalive in vkCreateInstance, after its signal handlers are set up: the
 # loader waits to open it until a writer comes (Vulkan loader 1.4.341,
-# measured 2026-10-14).
+# measured 2026-10-14). env sets SIGHUP's ignored bit at exec, so the check
+# also needs the handlers in place: SIGTERM is the one stop signal caught here,
+# since a background job starts with SIGINT and SIGQUIT ignored.
 mkfifo "$work_dir/stalled-driver.json"
 VK_DRIVER_FILES="$work_dir/stalled-driver.json" VK_ICD_FILENAMES="$work_dir/stalled-driver.json" \
     env --ignore-signal=HUP "$keepalive" >/dev/null 2>&1 &
 wrapper_pid=$!
 sleep 0.5
-ignored_mask="$(awk '/^SigIgn:/ { print $2 }' "/proc/$wrapper_pid/status" 2>/dev/null || true)"
+ignored_mask="" caught_mask=""
+read -r ignored_mask caught_mask < <(awk '/^SigIgn:/ { ignored = $2 } /^SigCgt:/ { caught = $2 }
+    END { print ignored, caught }' "/proc/$wrapper_pid/status" 2>/dev/null) || true
 kill -KILL "$wrapper_pid" 2>/dev/null || true
 wait "$wrapper_pid" 2>/dev/null || true
 wrapper_pid=""
-if [[ -z "$ignored_mask" ]]; then
+if [[ -z "$caught_mask" ]]; then
     fail "without a command, a SIGHUP ignored on entry stays ignored" \
         "it exited before the check, so the loader did not wait on the FIFO"
-elif (( 16#$ignored_mask & 1 )); then
+elif ! mask_has "$caught_mask" TERM; then
+    fail "without a command, a SIGHUP ignored on entry stays ignored" \
+        "SigCgt was $caught_mask, without SIGTERM's bit: its signal handlers were not in place yet"
+elif mask_has "$ignored_mask" HUP; then
     pass "without a command, a SIGHUP ignored on entry stays ignored"
 else
     fail "without a command, a SIGHUP ignored on entry stays ignored" \
