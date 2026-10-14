@@ -553,7 +553,8 @@ static void keepalive_report(Keepalive *k) {
             (unsigned long long)k->totals.holds, (double)k->totals.longest_ns / NANOSECONDS_PER_MILLISECOND);
 }
 
-/* 1 once the command has exited (its exit in command_exit), 0 while it runs.
+/* 1 once the command has exited (its exit in command_exit) or its status is
+ * lost, 0 while it runs.
  * Blocks until then when wait is set. The command is left unreaped (WNOWAIT):
  * its pid stays taken until this process exits, so a stop signal passed on
  * late never reaches a process that took the pid over. */
