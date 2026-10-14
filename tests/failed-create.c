@@ -1,16 +1,16 @@
 /*
  * Usage: FAILED_CREATE=CREATE LD_PRELOAD=failed-create.so COMMAND [ARGUMENT...]
  *
- * Stands in for the Vulkan loader in each call the keepalive makes to start
- * and to destroy what it started, with one discrete NVIDIA GPU. The create
- * CREATE names (vkCreateInstance, vkCreateDevice, vkCreateBuffer,
- * vkAllocateMemory, vkCreateCommandPool or vkCreateFence) fails after writing
- * a handle it never created: the Vulkan spec leaves a failed command's
- * outputs undefined. A call that gets that handle ends the process with
- * status 66, where a driver might crash it. Any other CREATE ends it with
- * status 2 at vkCreateInstance, so the stand-in's handles never reach the
- * real loader. tests/check.sh builds it as a shared object and preloads it
- * into the keepalive.
+ * Stands in for the Vulkan loader, with one discrete NVIDIA GPU, in each call
+ * the keepalive makes to start, up to its first fence, and to destroy what it
+ * started. The create CREATE names (vkCreateInstance, vkCreateDevice,
+ * vkCreateBuffer, vkAllocateMemory, vkCreateCommandPool or vkCreateFence)
+ * fails after writing a handle it never created: the Vulkan spec leaves a
+ * failed command's outputs undefined. A call that gets that handle ends the
+ * process with status 66, where a driver might crash it. Any other CREATE
+ * ends it with status 2 at vkCreateInstance, so the stand-in's handles never
+ * reach the real loader. tests/check.sh builds it as a shared object and
+ * preloads it into the keepalive.
  */
 #include <stdint.h>
 #include <stdio.h>
