@@ -9,11 +9,12 @@
 # kept from the drivers a loader settings file adds, so the keepalive fails
 # to start, which is the path that must still run the command. One check
 # names a FIFO as the driver file instead, to hold the keepalive in
-# vkCreateInstance, and others preload a stand-in for the loader with one
-# NVIDIA GPU, to fail each create in turn. One check feeds the hold report
-# fixed job times. The helpers in tests/ (empty-argv, failed-create, hangup,
-# hold-report, kill-log, slow-fork, unreaped-child) are built with the first
-# compiler that built it, and the checks run that compiler's build.
+# vkCreateInstance, and others preload a stand-in for the loader: one with one
+# NVIDIA GPU, to fail each create in turn, and one with the devices a check
+# lists, to see which GPU it opens. One check feeds the hold report fixed job
+# times. The helpers in tests/ (device-list, empty-argv, failed-create,
+# hangup, hold-report, kill-log, slow-fork, unreaped-child) are built with the
+# first compiler that built it, and the checks run that compiler's build.
 # Exits 1 if any check fails.
 set -euo pipefail
 
@@ -166,6 +167,31 @@ if build "$helper_compiler" -shared -fPIC -o "$work_dir/failed-create.so" "$repo
     done
 else
     fail "the output of a failed create is not used" "tests/failed-create.c did not build"
+fi
+
+# The keepalive opens the first discrete NVIDIA GPU, past an integrated GPU and
+# an integrated NVIDIA GPU listed before it. device-list.so stands in for the
+# loader with the devices DEVICES lists; its vkCreateDevice names the device it
+# got and fails.
+if build "$helper_compiler" -shared -fPIC -o "$work_dir/device-list.so" "$repo_dir/tests/device-list.c"; then
+    env DEVICES=8086:integrated,10de:integrated,10de:discrete LD_PRELOAD="$work_dir/device-list.so" \
+        "$keepalive" true >/dev/null 2>"$work_dir/stderr" || true
+    expect_contains "the first discrete NVIDIA GPU is chosen" "vkCreateDevice got device 2" \
+        "$(cat "$work_dir/stderr")"
+    # On a machine whose one GPU is another vendor's, the keepalive says so and
+    # makes no device on it (that would add a VkResult), and the command runs.
+    status=0
+    env DEVICES=8086:discrete LD_PRELOAD="$work_dir/device-list.so" \
+        "$keepalive" sh -c 'exit 5' >/dev/null 2>"$work_dir/stderr" || status=$?
+    no_gpu_stderr="$(cat "$work_dir/stderr")"
+    if [[ "$no_gpu_stderr" != *"no discrete NVIDIA GPU among 1 Vulkan device"* ||
+        "$no_gpu_stderr" == *VkResult* ]]; then
+        fail "another vendor's GPU is not used" "stderr was [$no_gpu_stderr]"
+    else
+        expect "another vendor's GPU is not used" status 5 "$status"
+    fi
+else
+    fail "the first discrete NVIDIA GPU is chosen" "tests/device-list.c did not build"
 fi
 
 output="$(echo hello | "$keepalive" cat 2>/dev/null)" || true
