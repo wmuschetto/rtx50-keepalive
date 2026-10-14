@@ -13,7 +13,17 @@ set -euo pipefail
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 work_dir="$(mktemp -d)"
-trap 'rm -rf "$work_dir"' EXIT
+# The keepalive a test runs in the background, while it runs. Background jobs
+# ignore Ctrl-C, so an interrupted run kills it and its command on the way out.
+wrapper_pid=""
+clean_up() {
+    if [[ -n "$wrapper_pid" ]]; then
+        pkill -KILL -P "$wrapper_pid" || true
+        kill -KILL "$wrapper_pid" 2>/dev/null || true
+    fi
+    rm -rf "$work_dir"
+}
+trap clean_up EXIT
 # The loader reads VK_DRIVER_FILES (1.3.207 and later) or VK_ICD_FILENAMES (older).
 export VK_DRIVER_FILES="$work_dir/no-such-driver.json"
 export VK_ICD_FILENAMES="$VK_DRIVER_FILES"
@@ -176,6 +186,7 @@ else
     set -e
     expect "SIGTERM is passed on to the command" status 7 "$status"
 fi
+wrapper_pid=""
 
 # A terminal emulator runs the keepalive as the leader of a new session; when
 # the window closes, the kernel sends SIGHUP to the leader alone.
@@ -203,6 +214,7 @@ sleep 0.5
 ignored_mask="$(awk '/^SigIgn:/ { print $2 }' "/proc/$wrapper_pid/status" 2>/dev/null || true)"
 kill -KILL "$wrapper_pid" 2>/dev/null || true
 wait "$wrapper_pid" 2>/dev/null || true
+wrapper_pid=""
 if [[ -z "$ignored_mask" ]]; then
     fail "without a command, a SIGHUP ignored on entry stays ignored" \
         "it exited before the check, so the loader did not wait on the FIFO"
