@@ -242,8 +242,8 @@ static VkPhysicalDevice find_nvidia_gpu(VkInstance instance, VkPhysicalDevicePro
             return devices[index];
         }
     }
-    fprintf(stderr, PROGRAM ": no discrete NVIDIA GPU among %u Vulkan devices (is the NVIDIA Vulkan "
-                    "driver installed?); the keepalive is off\n", count);
+    fprintf(stderr, PROGRAM ": no discrete NVIDIA GPU among %u Vulkan device%s (is the NVIDIA Vulkan "
+                    "driver installed?); the keepalive is off\n", count, count == 1 ? "" : "s");
     return VK_NULL_HANDLE;
 }
 

@@ -184,7 +184,7 @@ if build "$helper_compiler" -shared -fPIC -o "$work_dir/device-list.so" "$repo_d
     env DEVICES=8086:discrete LD_PRELOAD="$work_dir/device-list.so" \
         "$keepalive" sh -c 'exit 5' >/dev/null 2>"$work_dir/stderr" || status=$?
     no_gpu_stderr="$(cat "$work_dir/stderr")"
-    if [[ "$no_gpu_stderr" != *"no discrete NVIDIA GPU among 1 Vulkan device"* ||
+    if [[ "$no_gpu_stderr" != *"no discrete NVIDIA GPU among 1 Vulkan device ("* ||
         "$no_gpu_stderr" == *VkResult* ]]; then
         fail "another vendor's GPU is not used" "stderr was [$no_gpu_stderr]"
     else
