@@ -144,6 +144,18 @@ run sh -c 'echo ran'
 expect "the command runs when the keepalive cannot start" stdout ran "$stdout"
 expect_contains "the failed start is reported on stderr" "the keepalive is off" "$stderr"
 
+# Under a hard open-file limit too low for its fences, the keepalive names the
+# limit and stops before its first Vulkan call (the loader would fail
+# vkCreateInstance here), and the command runs.
+status=0
+(ulimit -n "$low_limit" && exec "$keepalive" sh -c 'exit 5') >/dev/null 2>"$work_dir/stderr" || status=$?
+limit_stderr="$(cat "$work_dir/stderr")"
+if [[ "$limit_stderr" != *"the hard limit is $low_limit"* || "$limit_stderr" == *VkResult* ]]; then
+    fail "a hard open-file limit too low stops the keepalive before Vulkan" "stderr was [$limit_stderr]"
+else
+    expect "a hard open-file limit too low stops the keepalive before Vulkan" status 5 "$status"
+fi
+
 # A failed create may leave a handle it never created in its output, and
 # destroying that would crash the keepalive and orphan the command.
 # failed-create.so stands in for the loader with one NVIDIA GPU, makes the
