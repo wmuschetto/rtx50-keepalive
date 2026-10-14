@@ -12,10 +12,12 @@
 # vkCreateInstance, and others preload a stand-in for the loader: one with one
 # NVIDIA GPU, to fail each create in turn, and one with the devices a check
 # lists, to see which GPU it opens. One check feeds the hold report fixed job
-# times, and another checks a hold's time against the clock. The helpers in
-# tests/ (device-list, empty-argv, failed-create, hangup, hold-report,
-# hold-start, kill-log, slow-fork, unreaped-child) are built with the first
-# compiler that built it, and the checks run that compiler's build.
+# times, another checks a hold's time against the clock, and one runs the job
+# loop through a hold against stand-ins for the Vulkan calls and the clock.
+# The helpers in tests/ (device-list, empty-argv, failed-create, hangup,
+# hold-report, hold-start, keepalive-loop, kill-log, slow-fork,
+# unreaped-child) are built with the first compiler that built it, and the
+# checks run that compiler's build.
 # Exits 1 if any check fails.
 set -euo pipefail
 
@@ -411,6 +413,22 @@ if build "$helper_compiler" -Wno-unused-function \
     expect "a hold's time is when its first late job was submitted" status 0 "$status"
 else
     fail "a hold's time is when its first late job was submitted" "tests/hold-start.c did not build"
+fi
+
+# The job loop needs no GPU either: keepalive-loop runs it against stand-ins
+# for the Vulkan calls and the clock, through a hold that fills all 2048 slots
+# and on until the ring of slots has wrapped three times. It exits with a
+# message on a fence reset, submitted or waited on out of turn.
+loop_wanted="rtx50-keepalive: TIME hold: 2048 jobs late, longest fence 10350.0 ms
+rtx50-keepalive: stopped after 31 s; 6144 jobs, 2048 late in 1 holds, longest fence 10350.0 ms"
+if build "$helper_compiler" -Wno-unused-function \
+    -o "$work_dir/keepalive-loop" "$repo_dir/tests/keepalive-loop.c" -lvulkan; then
+    output="$("$work_dir/keepalive-loop" 2>&1 | sed -E 's/[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}/TIME/')" || true
+    expect "the job loop keeps submitting through a hold that fills every slot" stdout \
+        "$loop_wanted" "$output"
+else
+    fail "the job loop keeps submitting through a hold that fills every slot" \
+        "tests/keepalive-loop.c did not build"
 fi
 
 # Whether a signal mask from /proc/PID/status (hexadecimal) holds the named signal.
