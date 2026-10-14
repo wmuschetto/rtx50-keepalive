@@ -599,12 +599,21 @@ static int run_with_command(char **command) {
     }
     sigaddset(&held, SIGCHLD);
     sigprocmask(SIG_BLOCK, &held, &previous);
+    /* An inherited SIG_IGN lets the kernel reap a command that exits before
+     * install_signal_handlers, and its exit status is lost. The command gets
+     * the inherited action back. */
+    struct sigaction inherited_on_child, default_on_child;
+    memset(&default_on_child, 0, sizeof default_on_child);
+    default_on_child.sa_handler = SIG_DFL;
+    sigemptyset(&default_on_child.sa_mask);
+    sigaction(SIGCHLD, &default_on_child, &inherited_on_child);
     pid_t pid = fork();
     if (pid <= 0) {
         if (pid < 0) {
             fprintf(stderr, PROGRAM ": fork failed (%s); running the command without the keepalive\n",
                     strerror(errno));
         }
+        sigaction(SIGCHLD, &inherited_on_child, NULL);
         sigprocmask(SIG_SETMASK, &previous, NULL);
         exec_command(command);
     }

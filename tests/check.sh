@@ -128,6 +128,18 @@ touch "$work_dir/not-executable"
 run "$work_dir/not-executable"
 expect "a command that is not executable exits 126" status 126 "$status"
 
+# A launcher can leave SIGCHLD ignored, and an ignored SIGCHLD lets the kernel
+# reap a child at once. slow-fork.so holds the keepalive for 300 ms after its
+# fork, so the command exits before the signal handlers are in place.
+set +e
+"$helper_compiler" -std=c17 -O2 -Wall -Wextra -Wshadow -Wconversion -Werror -shared -fPIC \
+    -o "$work_dir/slow-fork.so" "$repo_dir/tests/slow-fork.c" -ldl &&
+    env --ignore-signal=CHLD LD_PRELOAD="$work_dir/slow-fork.so" \
+        "$keepalive" "$work_dir/no-such-command" >/dev/null 2>&1
+status=$?
+set -e
+expect "a quick command's exit status survives an inherited ignored SIGCHLD" status 127 "$status"
+
 # A SIGTERM sent to the keepalive's process is passed on to the command.
 "$keepalive" sh -c 'trap "exit 7" TERM; while :; do sleep 0.05; done' >/dev/null 2>&1 &
 wrapper_pid=$!
