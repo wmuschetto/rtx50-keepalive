@@ -79,9 +79,8 @@ typedef struct {
     int64_t submitted_ns;
 } Slot;
 
-/* A hold: consecutive jobs that finished late. */
+/* A hold: consecutive jobs that finished late; none is open while late_jobs is 0. */
 typedef struct {
-    int open;
     char started_at[64];
     uint64_t late_jobs;
     int64_t longest_ns;
@@ -432,13 +431,13 @@ static int keepalive_start(Keepalive *k) {
 }
 
 static void close_hold(Hold *hold, Totals *totals) {
-    if (!hold->open) {
+    if (hold->late_jobs == 0) {
         return;
     }
     totals->holds++;
     fprintf(stderr, PROGRAM ": %s hold: %llu jobs late, longest fence %.1f ms\n", hold->started_at,
             (unsigned long long)hold->late_jobs, (double)hold->longest_ns / NANOSECONDS_PER_MILLISECOND);
-    hold->open = 0;
+    hold->late_jobs = 0;
 }
 
 static void record_finished(int64_t elapsed_ns, Hold *hold, Totals *totals) {
@@ -450,8 +449,8 @@ static void record_finished(int64_t elapsed_ns, Hold *hold, Totals *totals) {
         return;
     }
     totals->late++;
-    if (!hold->open) {
-        *hold = (Hold){.open = 1};
+    if (hold->late_jobs == 0) {
+        *hold = (Hold){0};
         /* The first late job was submitted when the hold began. */
         format_wall_time(hold->started_at, sizeof hold->started_at, elapsed_ns);
     }

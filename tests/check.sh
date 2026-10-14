@@ -10,9 +10,10 @@
 # to start, which is the path that must still run the command. One check
 # names a FIFO as the driver file instead, to hold the keepalive in
 # vkCreateInstance, and others preload a stand-in for the loader with one
-# NVIDIA GPU, to fail each create in turn. The helpers in tests/ (empty-argv,
-# failed-create, hangup, kill-log, slow-fork, unreaped-child) are built with
-# the first compiler that built it.
+# NVIDIA GPU, to fail each create in turn. One check feeds the hold report
+# fixed job times. The helpers in tests/ (empty-argv, failed-create, hangup,
+# hold-report, kill-log, slow-fork, unreaped-child) are built with the first
+# compiler that built it.
 # Exits 1 if any check fails.
 set -euo pipefail
 
@@ -371,6 +372,27 @@ if "$helper_compiler" -std=c17 -O2 -Wall -Wextra -Wshadow -Wconversion -Werror \
     expect "an empty argv runs no command" stdout "" "$output"
 else
     fail "an empty argv runs no command" "tests/empty-argv.c did not build"
+fi
+
+# The hold report comes from the keepalive's bookkeeping alone, which needs no
+# GPU: hold-report feeds it job times against the 20 ms limit, and the times
+# in tests/hold-report.c make three holds. A hold's time is masked, since it
+# is the wall-clock time the hold began. -Wno-unused-function: the helper
+# calls only part of the keepalive's source.
+hold_report_wanted="rtx50-keepalive: TIME hold: 2 jobs late, longest fence 45.0 ms
+rtx50-keepalive: TIME hold: 1 jobs late, longest fence 21.0 ms
+rtx50-keepalive: TIME hold: 2 jobs late, longest fence 25.0 ms
+rtx50-keepalive: stopped after 0 s; 8 jobs, 5 late in 3 holds, longest fence 45.0 ms"
+if "$helper_compiler" -std=c17 -O2 -Wall -Wextra -Wshadow -Wconversion -Werror -Wno-unused-function \
+    -o "$work_dir/hold-report" "$repo_dir/tests/hold-report.c" -lvulkan; then
+    set +e
+    output="$("$work_dir/hold-report" 2>&1 | sed -E 's/[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}/TIME/')"
+    set -e
+    expect "consecutive late jobs make one hold, and the report counts each" stdout \
+        "$hold_report_wanted" "$output"
+else
+    fail "consecutive late jobs make one hold, and the report counts each" \
+        "tests/hold-report.c did not build"
 fi
 
 # Whether a signal mask from /proc/PID/status (hexadecimal) holds the named signal.
