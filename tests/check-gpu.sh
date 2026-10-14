@@ -39,7 +39,6 @@ else
     fail "runs and stops cleanly under a 1024 open-file soft limit" "stderr was [$standalone]"
 fi
 
-# With a command: the keepalive stops when the command exits.
 started_ns="$(date +%s%N)"
 "$keepalive" sleep 2 2>"$work_dir/with-command"
 elapsed_ms=$(( ($(date +%s%N) - started_ns) / 1000000 ))
