@@ -29,7 +29,7 @@ back to where it was.
 ## Results so far
 
 On one PC (RTX 5090, driver 595.99.02, GNOME on Wayland, ARC Raiders through
-Proton 11), logging GPU use every 200 ms:
+Proton 11), logging GPU use every 200 ms (both sessions on 2026-10-13):
 
 | | Session | Freezes |
 |---|---|---|
