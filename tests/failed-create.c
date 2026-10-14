@@ -4,13 +4,15 @@
  * Stands in for the Vulkan loader, with one discrete NVIDIA GPU, in each call
  * the keepalive makes to start, to submit its first job, and to destroy what
  * it started. The create CREATE names (vkCreateInstance, vkCreateDevice,
- * vkCreateBuffer, vkAllocateMemory, vkCreateCommandPool or vkCreateFence)
- * fails after writing a handle it never created: the Vulkan spec leaves a
- * failed command's outputs undefined. A call that gets that handle ends the
- * process with status 66, where a driver might crash it. With CREATE
- * vkQueueSubmit every create succeeds and the first submit fails, as a GPU
- * lost mid-game makes it. Any other CREATE ends it with status 2 at
- * vkCreateInstance, so the stand-in's handles never reach the real loader.
+ * vkCreateBuffer, vkAllocateMemory, vkCreateCommandPool, or for vkCreateFence
+ * the second fence's) fails after writing a handle it never created: the
+ * Vulkan spec leaves a failed command's outputs undefined. A call that gets
+ * that handle ends the process with status 66, where a driver might crash it.
+ * With CREATE vkQueueSubmit every create succeeds and the first submit fails,
+ * as a GPU lost mid-game makes it. An object destroyed after its parent, or
+ * left at exit, ends the process with status 68. Any other CREATE ends it
+ * with status 2 at vkCreateInstance, so the stand-in's handles never reach
+ * the real loader.
  * tests/check.sh builds it as a shared object and preloads it into the
  * keepalive.
  */
@@ -23,6 +25,7 @@
 #define NVIDIA_VENDOR_ID 0x10DEu
 /* Exiting, not aborting, leaves no core dump behind. */
 #define EXIT_GOT_NEVER_CREATED 66
+#define EXIT_NOT_DESTROYED 68
 #define EXIT_USAGE 2
 
 static const char *const CREATES[] = {"vkCreateInstance", "vkCreateDevice",      "vkCreateBuffer",
@@ -35,6 +38,9 @@ static const char *const CREATES[] = {"vkCreateInstance", "vkCreateDevice",     
 static int created;
 static int never_created;
 #define CREATED(type) ((type)(uintptr_t)&created)
+/* Every handle is the same address, so the objects alive are a count: the
+ * instance, the device, and the device's buffer, memory, pool and fences. */
+static int live_objects;
 
 /* The handle a create writes: one it never created when FAILED_CREATE names
  * the create. */
@@ -43,6 +49,7 @@ static uintptr_t handle_from(const char *create) {
     if (failed_create != NULL && strcmp(failed_create, create) == 0) {
         return (uintptr_t)&never_created;
     }
+    live_objects++;
     return (uintptr_t)&created;
 }
 
@@ -58,6 +65,29 @@ static void check(uintptr_t handle, const char *call) {
     }
 }
 #define CHECK(handle) check((uintptr_t)(handle), __func__)
+
+/* Ends the process unless exactly wanted objects are alive. */
+static void expect_live(int wanted, const char *call) {
+    if (live_objects != wanted) {
+        fprintf(stderr, "failed-create: objects alive at %s: %d, expected %d\n", call, live_objects, wanted);
+        _Exit(EXIT_NOT_DESTROYED);
+    }
+}
+
+/* Destroying VK_NULL_HANDLE is allowed and destroys nothing. */
+static void destroyed(uintptr_t handle, const char *call) {
+    check(handle, call);
+    if (handle != 0) {
+        live_objects--;
+    }
+}
+#define DESTROYED(handle) destroyed((uintptr_t)(handle), __func__)
+
+/* The keepalive skips its teardown only after a run that did not fail, which
+ * the failed submit rules out. Runs in the command too, which creates nothing. */
+__attribute__((destructor)) static void expect_all_destroyed(void) {
+    expect_live(0, "exit");
+}
 
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateInstance(const VkInstanceCreateInfo *info,
                                                 const VkAllocationCallbacks *allocator,
@@ -198,7 +228,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateFence(VkDevice device, const VkFenceCreat
     (void)info;
     (void)allocator;
     CHECK(device);
-    uintptr_t handle = handle_from("vkCreateFence");
+    /* The second fence fails, so the first is destroyed on the way out. */
+    static int fences;
+    uintptr_t handle = handle_from(fences++ == 0 ? "the first vkCreateFence" : "vkCreateFence");
     *fence = (VkFence)handle;
     return result_of(handle);
 }
@@ -252,36 +284,46 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyFence(VkDevice device, VkFence fence,
                                           const VkAllocationCallbacks *allocator) {
     (void)allocator;
     CHECK(device);
-    CHECK(fence);
+    DESTROYED(fence);
 }
 
 VKAPI_ATTR void VKAPI_CALL vkDestroyCommandPool(VkDevice device, VkCommandPool pool,
                                                 const VkAllocationCallbacks *allocator) {
     (void)allocator;
     CHECK(device);
-    CHECK(pool);
+    DESTROYED(pool);
 }
 
 VKAPI_ATTR void VKAPI_CALL vkDestroyBuffer(VkDevice device, VkBuffer buffer,
                                            const VkAllocationCallbacks *allocator) {
     (void)allocator;
     CHECK(device);
-    CHECK(buffer);
+    DESTROYED(buffer);
 }
 
 VKAPI_ATTR void VKAPI_CALL vkFreeMemory(VkDevice device, VkDeviceMemory memory,
                                         const VkAllocationCallbacks *allocator) {
     (void)allocator;
     CHECK(device);
-    CHECK(memory);
+    DESTROYED(memory);
 }
 
 VKAPI_ATTR void VKAPI_CALL vkDestroyDevice(VkDevice device, const VkAllocationCallbacks *allocator) {
     (void)allocator;
     CHECK(device);
+    /* After its buffer, memory, pool and fences: the instance and the device are left. */
+    if (device != VK_NULL_HANDLE) {
+        expect_live(2, __func__);
+    }
+    DESTROYED(device);
 }
 
 VKAPI_ATTR void VKAPI_CALL vkDestroyInstance(VkInstance instance, const VkAllocationCallbacks *allocator) {
     (void)allocator;
     CHECK(instance);
+    /* After its device: the instance alone is left. */
+    if (instance != VK_NULL_HANDLE) {
+        expect_live(1, __func__);
+    }
+    DESTROYED(instance);
 }

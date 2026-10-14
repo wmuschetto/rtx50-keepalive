@@ -11,14 +11,15 @@
 # keepalive fails to start, which is the path that must still run the command.
 # One check names a FIFO as the driver file instead, to hold the keepalive in
 # vkCreateInstance, and others preload a stand-in for the loader: one with one
-# NVIDIA GPU, to fail each create in turn and then the first submit, and one
-# with the devices a check lists, to see which GPU it opens. One check feeds
-# the hold report fixed job times, another checks a hold's time against the
-# clock, and one runs the job loop through a hold against stand-ins for the
-# Vulkan calls and the clock. The helpers in tests/ (device-list, empty-argv,
-# failed-create, failed-fork, hangup, hold-report, hold-start, keepalive-loop,
-# kill-log, slow-fork, unreaped-child) are built with the first compiler that
-# built it, and the checks run that compiler's build.
+# NVIDIA GPU, to fail each create in turn and then the first submit and count
+# what is destroyed, and one with the devices a check lists, to see which GPU
+# it opens. One check feeds the hold report fixed job times, another checks a
+# hold's time against the clock, and one runs the job loop through a hold
+# against stand-ins for the Vulkan calls and the clock. The helpers in tests/
+# (device-list, empty-argv, failed-create, failed-fork, hangup, hold-report,
+# hold-start, keepalive-loop, kill-log, slow-fork, unreaped-child) are built
+# with the first compiler that built it, and the checks run that compiler's
+# build.
 # Exits 1 if any check fails.
 set -euo pipefail
 
@@ -172,9 +173,12 @@ else
 fi
 
 # A failed create may leave a handle it never created in its output, and
-# destroying that would crash the keepalive and orphan the command.
+# destroying that would crash the keepalive and orphan the command; what was
+# created must still be destroyed, each object before its parent.
 # failed-create.so stands in for the loader with one NVIDIA GPU, makes the
-# create FAILED_CREATE names do that, and exits 66 when a call gets the handle.
+# create FAILED_CREATE names do that (for vkCreateFence, the second fence's),
+# exits 66 when a call gets the handle, and exits 68 when an object is
+# destroyed after its parent or left at exit.
 # The keepalive's report shows it reached that create: under a hard open-file
 # limit too low for its fences it stops before any. VkResult -3 is the
 # stand-in's; the loader itself fails vkCreateInstance with -9 here.
@@ -186,10 +190,11 @@ if build "$helper_compiler" -shared -fPIC -o "$work_dir/failed-create.so" "$repo
             >/dev/null 2>"$work_dir/stderr" || status=$?
         create_stderr="$(cat "$work_dir/stderr")"
         if [[ "$create_stderr" != *"$create failed (VkResult -3)"* ]]; then
-            fail "the output of a failed $create is not used" \
+            fail "after a failed $create, what was created is destroyed and the failed output is not used" \
                 "the keepalive did not reach $create; stderr was [$create_stderr]"
         else
-            expect "the output of a failed $create is not used" status 5 "$status"
+            expect "after a failed $create, what was created is destroyed and the failed output is not used" \
+                status 5 "$status"
         fi
     done
     # A keepalive that fails mid-run, as on a lost GPU, frees its device and
@@ -202,13 +207,15 @@ if build "$helper_compiler" -shared -fPIC -o "$work_dir/failed-create.so" "$repo
         sh "$work_dir/stderr" >/dev/null 2>"$work_dir/stderr" || status=$?
     submit_stderr="$(cat "$work_dir/stderr")"
     if [[ "$submit_stderr" != *"vkQueueSubmit failed (VkResult -4)"* ]]; then
-        fail "the command runs on when the keepalive fails mid-run" \
+        fail "a keepalive that fails mid-run destroys what it created, and the command runs on" \
             "the keepalive did not reach vkQueueSubmit; stderr was [$submit_stderr]"
     else
-        expect "the command runs on when the keepalive fails mid-run" status 5 "$status"
+        expect "a keepalive that fails mid-run destroys what it created, and the command runs on" status 5 \
+            "$status"
     fi
 else
-    fail "the output of a failed create is not used" "tests/failed-create.c did not build"
+    fail "after a failed create, what was created is destroyed and the failed output is not used" \
+        "tests/failed-create.c did not build"
 fi
 
 # The keepalive opens the first discrete NVIDIA GPU, past an integrated GPU and
