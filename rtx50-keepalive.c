@@ -608,7 +608,6 @@ static int run_with_command(char **command) {
     for (size_t index = 0; index < STOP_SIGNAL_COUNT; index++) {
         sigaddset(&held, STOP_SIGNALS[index]);
     }
-    sigaddset(&held, SIGCHLD);
     sigprocmask(SIG_BLOCK, &held, &previous);
     /* An inherited SIG_IGN lets the kernel reap a command that exits before
      * install_signal_handlers, and its exit status is lost. The command gets
