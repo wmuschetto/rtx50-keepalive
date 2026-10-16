@@ -33,9 +33,8 @@ Proton 11), logging GPU use every 200 ms:
 
 | | Play time | Freezes |
 |---|---|---|
-| Without a keepalive | 3 h 38 min, one session (2026-10-13) | 3 |
-| Keepalive started by a logging script | 7 h 20 min, two sessions (2026-10-13 and 14) | 0 |
-| rtx50-keepalive 0.1.0 as a launch option | 6 h 8 min, four sessions (2026-10-14 and 15) | 0 |
+| Without rtx50-keepalive | 3 h 38 min, one session (2026-10-13) | 3 |
+| With rtx50-keepalive | 13 h 28 min, six sessions (2026-10-13 to 15) | 0 |
 
 Each freeze without the keepalive showed in the GPU log as GPU use dropping to
 0% for 2-3 s mid-game and coming straight back. With the keepalive the game did
