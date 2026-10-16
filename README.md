@@ -33,20 +33,23 @@ Proton 11), logging GPU use every 200 ms:
 
 | | Play time | Freezes |
 |---|---|---|
-| Without rtx50-keepalive | 3 h 38 min, one session (2026-10-13) | 3 |
-| With rtx50-keepalive | 7 h 20 min, two sessions (2026-10-13 and 14) | 0 |
+| Without a keepalive | 3 h 38 min, one session (2026-10-13) | 3 |
+| Keepalive started by a logging script | 7 h 20 min, two sessions (2026-10-13 and 14) | 0 |
+| rtx50-keepalive 0.1.0 as a launch option | 6 h 8 min, four sessions (2026-10-14 and 15) | 0 |
 
 Each freeze without the keepalive showed in the GPU log as GPU use dropping to
 0% for 2-3 s mid-game and coming straight back. With the keepalive the game did
 not freeze. The log does show three short idle periods in the second session,
 each starting within 45 s of switching back to the game from another window,
-with no freeze in the game. Both sessions with the keepalive ran the same job
-loop as this program, started beside the game by a logging script rather than
-as a launch option.
+with no freeze in the game. The first two sessions with the keepalive ran the
+same job loop as this program, started beside the game by a logging script;
+the last four ran this program as the game's launch option. In those four, no
+job of its 4.4 million waited over 20 ms (the longest took 6.2 ms), so the
+driver never held back its own "work done" signal either.
 
-At the rate seen without the keepalive, 7 h 20 min with no freeze seen would
-happen by chance about 0.2% of the time. This is still one machine and one game,
-so results from others are welcome in #880.
+At the rate seen without the keepalive, 13 h 28 min with no freeze seen would
+happen by chance about once in 70,000 times. This is still one machine and one
+game, so results from others are welcome in #880.
 
 ## Requirements
 
