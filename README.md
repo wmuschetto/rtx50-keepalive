@@ -54,26 +54,32 @@ are welcome in #880.
 ## Requirements
 
 - Linux with an NVIDIA GPU and NVIDIA's driver (proprietary or open kernel modules)
-- A C compiler, `make`, and the Vulkan loader and headers:
-  - Debian, Ubuntu: `sudo apt install build-essential libvulkan-dev`
-  - Fedora: `sudo dnf install gcc make vulkan-loader-devel vulkan-headers`
-  - Arch: `sudo pacman -S base-devel vulkan-icd-loader vulkan-headers`
+- `git`, a C compiler, `make`, and the Vulkan loader and headers:
+  - Debian, Ubuntu: `sudo apt install git build-essential libvulkan-dev`
+  - Fedora: `sudo dnf install git gcc make vulkan-loader-devel vulkan-headers`
+  - Arch, CachyOS: `sudo pacman -S --needed git base-devel vulkan-icd-loader vulkan-headers`
 
 ## Install
 
-From a copy of this repository:
+In a terminal, download this repository into a new `rtx50-keepalive` folder,
+go into it, then build and install the program:
 
 ```sh
+git clone https://github.com/wmuschetto/rtx50-keepalive.git
+cd rtx50-keepalive
 make
 sudo make install
 ```
 
-This installs `/usr/local/bin/rtx50-keepalive`. To install somewhere else, set
+This installs `/usr/local/bin/rtx50-keepalive`, and `command -v rtx50-keepalive`
+then prints that path. No reboot is needed. To install somewhere else, set
 `PREFIX`, e.g. `make install PREFIX=~/.local`, and then use the program's full
 path in launch options, since a launcher's `PATH` may not include that folder.
 
-To remove it: `sudo make uninstall`. If you installed with `PREFIX`, pass the same
-one, e.g. `make uninstall PREFIX=~/.local`.
+To update it later, run `git pull` in that folder, then `make` and
+`sudo make install` again. To remove it, run `sudo make uninstall` in that
+folder. If you installed with `PREFIX`, pass the same one, e.g.
+`make uninstall PREFIX=~/.local`.
 
 ## Use
 
