@@ -34,21 +34,22 @@ Proton 11), logging GPU use every 200 ms:
 | | Play time | Freezes |
 |---|---|---|
 | Without rtx50-keepalive | 3 h 38 min, one session (2026-10-13) | 3 |
-| With rtx50-keepalive | 13 h 28 min, six sessions (2026-10-13 to 15) | 0 |
+| With rtx50-keepalive | 48 h 16 min, 32 game launches (2026-10-13 to 23) | 0 |
 
 Each freeze without the keepalive showed in the GPU log as GPU use dropping to
 0% for 2-3 s mid-game and coming straight back. With the keepalive the game did
-not freeze. The log does show three short idle periods in the second session,
-each starting within 45 s of switching back to the game from another window,
-with no freeze in the game. The first two sessions with the keepalive ran the
-same job loop as this program, started beside the game by a logging script;
-the last four ran this program as the game's launch option. In those four, no
-job of its 4.4 million waited over 20 ms (the longest took 6.2 ms), so the
-driver never held back its own "work done" signal either.
+not freeze. The GPU log, which covers 41 h of that time (up to 2026-10-18),
+does show five idle periods of 4-9 s: four started within 45 s of switching
+back to the game from another window, with no freeze seen in the game, and one
+came while another window had the focus. The first two sessions with the
+keepalive ran the same job loop as this program, started beside the game by a
+logging script; the other 30 ran this program as the game's launch option. In
+those 30, no job of its 29.5 million waited over 20 ms (the longest took
+8.0 ms), so the driver never held back its own "work done" signal either.
 
-At the rate seen without the keepalive, 13 h 28 min with no freeze seen would
-happen by chance about once in 70,000 times. This is still one machine and one
-game, so results from others are welcome in #880.
+At the rate seen without the keepalive, about 40 freezes would be expected in
+48 h 16 min. This is still one machine and one game, so results from others
+are welcome in #880.
 
 ## Requirements
 
